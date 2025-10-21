@@ -1,0 +1,392 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Model
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  password      String
+  name          String
+  avatar        String?
+  studyStreak   Int      @default(0)
+  lastStudyDate DateTime?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  studySessions     StudySession[]
+  flashcards        Flashcard[]
+  tasks             Task[]
+  notifications     Notification[]
+  studyMaterials    StudyMaterial[]
+  simulatedExams    SimulatedExam[]
+  appointments      Appointment[]
+  achievements      Achievement[]
+  userPoints        UserPoints?
+  blockedSites      BlockedSite[]
+  appSettings       AppSettings?
+  studyReports      StudyReport[]
+  focusTools        FocusTools?
+
+  @@map("users")
+}
+
+// Study Session Model
+model StudySession {
+  id        String   @id @default(cuid())
+  userId    String
+  mode      SessionMode
+  subject   String?
+  startTime String
+  endTime   String?
+  duration  Int      // in minutes
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("study_sessions")
+}
+
+// Flashcard Model
+model Flashcard {
+  id           String        @id @default(cuid())
+  userId       String
+  question     String
+  answer       String
+  category     String
+  difficulty   Difficulty
+  lastReviewed DateTime?
+  nextReview   DateTime?
+  reviewCount  Int           @default(0)
+  isActive     Boolean       @default(true)
+  tags         String[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("flashcards")
+}
+
+// Task Model
+model Task {
+  id            String    @id @default(cuid())
+  userId        String
+  title         String
+  description   String?
+  completed     Boolean   @default(false)
+  completedOnTime Boolean?
+  priority      Priority  @default(MEDIUM)
+  dueDate       String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("tasks")
+}
+
+// Notification Model
+model Notification {
+  id           String           @id @default(cuid())
+  userId       String
+  title        String
+  message      String
+  type         NotificationType @default(SYSTEM)
+  isRead       Boolean          @default(false)
+  isEmailSent  Boolean          @default(false)
+  scheduledFor DateTime?
+  sentAt       DateTime?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+// Study Material Model
+model StudyMaterial {
+  id             String   @id @default(cuid())
+  userId         String
+  title          String
+  description    String?
+  fileName       String
+  originalName   String
+  fileSize       Int
+  mimeType       String
+  filePath       String
+  category       String
+  tags           String[]
+  isPublic       Boolean  @default(false)
+  downloadCount  Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("study_materials")
+}
+
+// Simulated Exam Model
+model SimulatedExam {
+  id              String   @id @default(cuid())
+  userId          String
+  name            String
+  date            String
+  subject         String
+  correctAnswers  Int
+  totalQuestions  Int
+  duration        Int?     // in minutes
+  createdAt       DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("simulated_exams")
+}
+
+// Appointment Model
+model Appointment {
+  id                String         @id @default(cuid())
+  userId            String
+  title             String
+  description       String?
+  date              String
+  startTime         String
+  endTime           String
+  isRecurring       Boolean        @default(false)
+  recurrenceType    RecurrenceType?
+  recurrenceEndDate String?
+  reminders         Reminder[]
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("appointments")
+}
+
+// Reminder Model (embedded in Appointment)
+model Reminder {
+  id           String      @id @default(cuid())
+  appointmentId String
+  type         ReminderType
+  hoursBefore  Int?
+  time         String?
+  isActive     Boolean     @default(true)
+
+  // Relations
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("reminders")
+}
+
+// Achievement Model
+model Achievement {
+  id          String   @id @default(cuid())
+  userId      String
+  badgeId     String
+  unlockedAt  DateTime @default(now())
+  pointsEarned Int
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("achievements")
+}
+
+// User Points Model
+model UserPoints {
+  id                    String   @id @default(cuid())
+  userId                String   @unique
+  totalPoints            Int      @default(0)
+  level                 Int      @default(1)
+  experience            Int      @default(0)
+  experienceToNextLevel Int      @default(100)
+  pointsHistory         Json[]
+  lastUpdated           DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_points")
+}
+
+// Badge Model
+model Badge {
+  id           String     @id @default(cuid())
+  name         String
+  description  String
+  icon         String
+  category     BadgeCategory
+  pointsReward Int
+  requirements Json
+  isUnlocked   Boolean    @default(false)
+  unlockedAt   DateTime?
+
+  @@map("badges")
+}
+
+// Blocked Site Model
+model BlockedSite {
+  id        String   @id @default(cuid())
+  userId    String
+  url       String
+  name      String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("blocked_sites")
+}
+
+// App Settings Model
+model AppSettings {
+  id             String       @id @default(cuid())
+  userId         String       @unique
+  examDate       String?
+  notifications  Boolean      @default(true)
+  soundEnabled   Boolean      @default(true)
+  theme          Theme        @default(AUTO)
+  timerSettings  Json
+  updatedAt      DateTime     @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("app_settings")
+}
+
+// Study Report Model
+model StudyReport {
+  id                      String   @id @default(cuid())
+  userId                  String
+  period                  ReportPeriod
+  startDate               DateTime
+  endDate                 DateTime
+  totalStudyTime          Int
+  totalSessions           Int
+  averageSessionDuration  Float
+  tasksCompleted          Int
+  tasksCreated            Int
+  flashcardsReviewed      Int
+  examsTaken              Int
+  averageScore            Float
+  goalsAchieved           Int
+  createdAt               DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("study_reports")
+}
+
+// Focus Tools Model
+model FocusTools {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  settings  Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("focus_tools")
+}
+
+// Spaced Repetition Model
+model SpacedRepetition {
+  id           String   @id @default(cuid())
+  userId       String
+  flashcardId  String
+  interval     Int
+  repetitions  Int
+  easeFactor   Float
+  nextReview   DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("spaced_repetitions")
+}
+
+// Enums
+enum SessionMode {
+  POMODORO
+  FLOWTIME
+  CUSTOM
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum NotificationType {
+  TASK
+  STUDY
+  EXAM
+  REMINDER
+  ACHIEVEMENT
+  SYSTEM
+}
+
+enum RecurrenceType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+enum ReminderType {
+  SAME_DAY
+  HOURS_BEFORE
+}
+
+enum BadgeCategory {
+  STUDY
+  ACHIEVEMENT
+  SOCIAL
+  SPECIAL
+}
+
+enum Theme {
+  LIGHT
+  DARK
+  AUTO
+}
+
+enum ReportPeriod {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
