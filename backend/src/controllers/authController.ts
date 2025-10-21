@@ -1,13 +1,17 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { UserModel } from '../models/User';
-import type { AuthResponse, ApiResponse } from '../types';
+import bcrypt from 'bcryptjs';
+import { UserModel } from '../models';
+import type { AuthResponse } from '../types';
 
 const generateToken = (userId: string): string => {
+  const secret = process.env['JWT_SECRET'] || 'fallback-secret';
+  const expiresIn = process.env['JWT_EXPIRES_IN'] || '7d';
+  
   return jwt.sign(
     { userId },
-    process.env.JWT_SECRET || 'fallback-secret',
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    secret,
+    { expiresIn: expiresIn as string }
   );
 };
 
@@ -16,7 +20,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     const { email, password, name } = req.body;
 
     // Check if user already exists
-    const existingUser = await UserModel.findOne({ email });
+    const existingUser = await UserModel.findByEmail(email);
     if (existingUser) {
       res.status(400).json({
         success: false,
@@ -25,27 +29,28 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 12);
+
     // Create new user
-    const user = new UserModel({
+    const user = await UserModel.create({
       email,
-      password,
+      password: hashedPassword,
       name
     });
 
-    await user.save();
-
     // Generate token
-    const token = generateToken(user._id.toString());
+    const token = generateToken(user.id);
 
     const response: AuthResponse = {
       user: {
-        _id: user._id,
+        _id: user.id,
         email: user.email,
         name: user.name,
         avatar: user.avatar,
         isActive: user.isActive,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt.toISOString()
       },
       token
     };
@@ -58,11 +63,10 @@ export const register = async (req: Request, res: Response): Promise<void> => {
   } catch (error: any) {
     console.error('Registration error:', error);
     
-    if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map((err: any) => err.message);
+    if (error.code === 'P2002') {
       res.status(400).json({
         success: false,
-        error: errors.join(', ')
+        error: 'User with this email already exists'
       });
       return;
     }
@@ -79,7 +83,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     const { email, password } = req.body;
 
     // Find user by email
-    const user = await UserModel.findOne({ email });
+    const user = await UserModel.findByEmail(email);
     if (!user) {
       res.status(401).json({
         success: false,
@@ -98,7 +102,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Verify password
-    const isPasswordValid = await user.comparePassword(password);
+    const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       res.status(401).json({
         success: false,
@@ -108,17 +112,17 @@ export const login = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Generate token
-    const token = generateToken(user._id.toString());
+    const token = generateToken(user.id);
 
     const response: AuthResponse = {
       user: {
-        _id: user._id,
+        _id: user.id,
         email: user.email,
         name: user.name,
         avatar: user.avatar,
         isActive: user.isActive,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt
+        createdAt: user.createdAt.toISOString(),
+        updatedAt: user.updatedAt.toISOString()
       },
       token
     };
@@ -170,32 +174,32 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
     }
 
     // Update fields
-    if (name) user.name = name;
-    if (avatar !== undefined) user.avatar = avatar;
+    const updateData: any = {};
+    if (name) updateData.name = name;
+    if (avatar !== undefined) updateData.avatar = avatar;
 
-    await user.save();
+    const updatedUser = await UserModel.update(userId, updateData);
 
     res.status(200).json({
       success: true,
       data: {
-        _id: user._id,
-        email: user.email,
-        name: user.name,
-        avatar: user.avatar,
-        isActive: user.isActive,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt
+        _id: updatedUser.id,
+        email: updatedUser.email,
+        name: updatedUser.name,
+        avatar: updatedUser.avatar,
+        isActive: updatedUser.isActive,
+        createdAt: updatedUser.createdAt.toISOString(),
+        updatedAt: updatedUser.updatedAt.toISOString()
       },
       message: 'Profile updated successfully'
     });
   } catch (error: any) {
     console.error('Update profile error:', error);
     
-    if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map((err: any) => err.message);
+    if (error.code === 'P2002') {
       res.status(400).json({
         success: false,
-        error: errors.join(', ')
+        error: 'Email already exists'
       });
       return;
     }

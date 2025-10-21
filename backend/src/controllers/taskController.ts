@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { TaskModel } from '../models/Task';
+import { TaskModel } from '../models';
 import type { Task, PaginationParams, PaginatedResponse } from '../types';
 import { GamificationService } from '../services/gamificationService';
 
@@ -12,16 +12,14 @@ export const createTask = async (req: AuthRequest, res: Response): Promise<void>
     const userId = req.user._id;
     const { title, description, priority, dueDate } = req.body;
 
-    const task = new TaskModel({
+    const task = await TaskModel.create({
       userId,
       title,
       description,
-      priority: priority || 'medium',
+      priority: priority || 'MEDIUM',
       dueDate,
       completed: false
     });
-
-    await task.save();
 
     res.status(201).json({
       success: true,
@@ -31,11 +29,10 @@ export const createTask = async (req: AuthRequest, res: Response): Promise<void>
   } catch (error: any) {
     console.error('Create task error:', error);
     
-    if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map((err: any) => err.message);
+    if (error.code === 'P2002') {
       res.status(400).json({
         success: false,
-        error: errors.join(', ')
+        error: 'Task with this title already exists'
       });
       return;
     }
@@ -74,16 +71,16 @@ export const getTasks = async (req: AuthRequest, res: Response): Promise<void> =
     }
 
     const skip = (Number(page) - 1) * Number(limit);
-    const sort: any = { [sortBy as string]: sortOrder === 'desc' ? -1 : 1 };
+    const sort: any = { [sortBy as string]: sortOrder === 'desc' ? 'desc' : 'asc' };
 
-    const [tasks, total] = await Promise.all([
-      TaskModel.find(filter)
-        .sort(sort)
-        .skip(skip)
-        .limit(Number(limit))
-        .lean(),
-      TaskModel.countDocuments(filter)
-    ]);
+    const tasks = await TaskModel.findByUserId(userId, {
+      where: filter,
+      orderBy: sort,
+      skip,
+      take: Number(limit)
+    });
+
+    const total = await TaskModel.findByUserId(userId, { where: filter }).then(tasks => tasks.length);
 
     const totalPages = Math.ceil(total / Number(limit));
 

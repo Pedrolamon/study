@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { UserModel } from '../models/User';
+import { UserModel } from '../models';
 
 interface AuthRequest extends Request {
   user?: any;
@@ -18,8 +18,8 @@ export const auth = async (req: AuthRequest, res: Response, next: NextFunction):
       return;
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as any;
-    const user = await UserModel.findById(decoded.userId).select('-password');
+    const decoded = jwt.verify(token, process.env['JWT_SECRET'] || 'fallback-secret') as any;
+    const user = await UserModel.findById(decoded.userId);
 
     if (!user) {
       res.status(401).json({
@@ -37,7 +37,9 @@ export const auth = async (req: AuthRequest, res: Response, next: NextFunction):
       return;
     }
 
-    req.user = user;
+    // Remove password from user object
+    const { password, ...userWithoutPassword } = user;
+    req.user = userWithoutPassword;
     next();
   } catch (error) {
     res.status(401).json({
@@ -56,11 +58,13 @@ export const optionalAuth = async (req: AuthRequest, res: Response, next: NextFu
       return;
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as any;
-    const user = await UserModel.findById(decoded.userId).select('-password');
+    const decoded = jwt.verify(token, process.env['JWT_SECRET'] || 'fallback-secret') as any;
+    const user = await UserModel.findById(decoded.userId);
 
     if (user && user.isActive) {
-      req.user = user;
+      // Remove password from user object
+      const { password, ...userWithoutPassword } = user;
+      req.user = userWithoutPassword;
     }
 
     next();

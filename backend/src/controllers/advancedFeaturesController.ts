@@ -282,7 +282,6 @@ export const submitReview = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     const { flashcardId, responseQuality, timeSpent } = req.body;
 
-    // Get current review session
     const currentReview = await ReviewSessionModel.findOne({
       userId,
       flashcardId
