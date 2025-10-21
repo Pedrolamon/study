@@ -7,14 +7,7 @@ import {
   OfflineQueueModel,
   CachedDataModel
 } from '../models/SpacedRepetition';
-import type {
-  Flashcard,
-  ReviewSession,
-  StudyStreak,
-  Widget,
-  OfflineQueue,
-  CachedData
-} from '../models/SpacedRepetition';
+import type { StudyStreak } from '../models/SpacedRepetition';
 
 interface AuthRequest extends Request {
   user?: any;
@@ -110,10 +103,12 @@ class StudyStreakManager {
   static async updateStreak(userId: string, studyDate: Date = new Date()): Promise<StudyStreak> {
     const today = new Date(studyDate.getFullYear(), studyDate.getMonth(), studyDate.getDate());
 
-    let streak = await StudyStreakModel.findOne({ userId });
+    let streak = await StudyStreakModel.findOne({ userId }).lean<StudyStreak>();
+
+    let streakDocument;
 
     if (!streak) {
-      streak = new StudyStreakModel({
+      streakDocument = new StudyStreakModel({
         userId,
         currentStreak: 1,
         longestStreak: 1,
@@ -123,6 +118,7 @@ class StudyStreakManager {
         studyDaysThisMonth: 1
       });
     } else {
+      streakDocument = await StudyStreakModel.findById(streak._id);
       const lastStudy = new Date(streak.lastStudyDate);
       const daysDiff = Math.floor((today.getTime() - lastStudy.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -148,8 +144,8 @@ class StudyStreakManager {
       streak.studyDaysThisMonth = await this.countStudyDaysInRange(userId, monthStart, today);
     }
 
-    await streak.save();
-    return streak;
+    await streakDocument!.save();
+    return streakDocument!.toObject() as StudyStreak;
   }
 
   private static async countStudyDaysInRange(userId: string, startDate: Date, endDate: Date): Promise<number> {
@@ -611,7 +607,7 @@ export const getStudyStreak = async (req: AuthRequest, res: Response) => {
     let streak = await StudyStreakModel.findOne({ userId });
 
     if (!streak) {
-      streak = await StudyStreakManager.updateStreak(userId);
+      streak = await StudyStreakManager.updateStreak(userId) as any;
     }
 
     res.json(streak);

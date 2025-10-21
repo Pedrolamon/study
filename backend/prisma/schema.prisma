@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,47 +9,47 @@ datasource db {
 
 // User Model
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
+  id            String    @id @default(cuid())
+  email         String    @unique
   password      String
   name          String
   avatar        String?
-  studyStreak   Int      @default(0)
+  studyStreak   Int       @default(0)
   lastStudyDate DateTime?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   // Relations
-  studySessions     StudySession[]
-  flashcards        Flashcard[]
-  tasks             Task[]
-  notifications     Notification[]
-  studyMaterials    StudyMaterial[]
-  simulatedExams    SimulatedExam[]
-  appointments      Appointment[]
-  achievements      Achievement[]
-  userPoints        UserPoints?
-  blockedSites      BlockedSite[]
-  appSettings       AppSettings?
-  studyReports      StudyReport[]
-  focusTools        FocusTools?
+  studySessions  StudySession[]
+  flashcards     Flashcard[]
+  tasks          Task[]
+  notifications  Notification[]
+  studyMaterials StudyMaterial[]
+  simulatedExams SimulatedExam[]
+  appointments   Appointment[]
+  achievements   Achievement[]
+  userPoints     UserPoints?
+  blockedSites   BlockedSite[]
+  appSettings    AppSettings?
+  studyReports   StudyReport[]
+  focusTools     FocusTools?
 
   @@map("users")
 }
 
 // Study Session Model
 model StudySession {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   userId    String
   mode      SessionMode
   subject   String?
   startTime String
   endTime   String?
-  duration  Int      // in minutes
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  duration  Int // in minutes
+  isActive  Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -62,7 +59,7 @@ model StudySession {
 
 // Flashcard Model
 model Flashcard {
-  id           String        @id @default(cuid())
+  id           String     @id @default(cuid())
   userId       String
   question     String
   answer       String
@@ -70,11 +67,11 @@ model Flashcard {
   difficulty   Difficulty
   lastReviewed DateTime?
   nextReview   DateTime?
-  reviewCount  Int           @default(0)
-  isActive     Boolean       @default(true)
+  reviewCount  Int        @default(0)
+  isActive     Boolean    @default(true)
   tags         String[]
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -84,16 +81,16 @@ model Flashcard {
 
 // Task Model
 model Task {
-  id            String    @id @default(cuid())
-  userId        String
-  title         String
-  description   String?
-  completed     Boolean   @default(false)
+  id              String   @id @default(cuid())
+  userId          String
+  title           String
+  description     String?
+  completed       Boolean  @default(false)
   completedOnTime Boolean?
-  priority      Priority  @default(MEDIUM)
-  dueDate       String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  priority        Priority @default(MEDIUM)
+  dueDate         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -123,21 +120,21 @@ model Notification {
 
 // Study Material Model
 model StudyMaterial {
-  id             String   @id @default(cuid())
-  userId         String
-  title          String
-  description    String?
-  fileName       String
-  originalName   String
-  fileSize       Int
-  mimeType       String
-  filePath       String
-  category       String
-  tags           String[]
-  isPublic       Boolean  @default(false)
-  downloadCount  Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id            String   @id @default(cuid())
+  userId        String
+  title         String
+  description   String?
+  fileName      String
+  originalName  String
+  fileSize      Int
+  mimeType      String
+  filePath      String
+  category      String
+  tags          String[]
+  isPublic      Boolean  @default(false)
+  downloadCount Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -147,15 +144,15 @@ model StudyMaterial {
 
 // Simulated Exam Model
 model SimulatedExam {
-  id              String   @id @default(cuid())
-  userId          String
-  name            String
-  date            String
-  subject         String
-  correctAnswers  Int
-  totalQuestions  Int
-  duration        Int?     // in minutes
-  createdAt       DateTime @default(now())
+  id             String   @id @default(cuid())
+  userId         String
+  name           String
+  date           String
+  subject        String
+  correctAnswers Int
+  totalQuestions Int
+  duration       Int? // in minutes
+  createdAt      DateTime @default(now())
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -165,19 +162,19 @@ model SimulatedExam {
 
 // Appointment Model
 model Appointment {
-  id                String         @id @default(cuid())
+  id                String          @id @default(cuid())
   userId            String
   title             String
   description       String?
   date              String
   startTime         String
   endTime           String
-  isRecurring       Boolean        @default(false)
+  isRecurring       Boolean         @default(false)
   recurrenceType    RecurrenceType?
   recurrenceEndDate String?
   reminders         Reminder[]
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -187,12 +184,12 @@ model Appointment {
 
 // Reminder Model (embedded in Appointment)
 model Reminder {
-  id           String      @id @default(cuid())
+  id            String       @id @default(cuid())
   appointmentId String
-  type         ReminderType
-  hoursBefore  Int?
-  time         String?
-  isActive     Boolean     @default(true)
+  type          ReminderType
+  hoursBefore   Int?
+  time          String?
+  isActive      Boolean      @default(true)
 
   // Relations
   appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
@@ -202,10 +199,10 @@ model Reminder {
 
 // Achievement Model
 model Achievement {
-  id          String   @id @default(cuid())
-  userId      String
-  badgeId     String
-  unlockedAt  DateTime @default(now())
+  id           String   @id @default(cuid())
+  userId       String
+  badgeId      String
+  unlockedAt   DateTime @default(now())
   pointsEarned Int
 
   // Relations
@@ -218,7 +215,7 @@ model Achievement {
 model UserPoints {
   id                    String   @id @default(cuid())
   userId                String   @unique
-  totalPoints            Int      @default(0)
+  totalPoints           Int      @default(0)
   level                 Int      @default(1)
   experience            Int      @default(0)
   experienceToNextLevel Int      @default(100)
@@ -233,14 +230,14 @@ model UserPoints {
 
 // Badge Model
 model Badge {
-  id           String     @id @default(cuid())
+  id           String        @id @default(cuid())
   name         String
   description  String
   icon         String
   category     BadgeCategory
   pointsReward Int
   requirements Json
-  isUnlocked   Boolean    @default(false)
+  isUnlocked   Boolean       @default(false)
   unlockedAt   DateTime?
 
   @@map("badges")
@@ -263,14 +260,14 @@ model BlockedSite {
 
 // App Settings Model
 model AppSettings {
-  id             String       @id @default(cuid())
-  userId         String       @unique
-  examDate       String?
-  notifications  Boolean      @default(true)
-  soundEnabled   Boolean      @default(true)
-  theme          Theme        @default(AUTO)
-  timerSettings  Json
-  updatedAt      DateTime     @updatedAt
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  examDate      String?
+  notifications Boolean  @default(true)
+  soundEnabled  Boolean  @default(true)
+  theme         Theme    @default(AUTO)
+  timerSettings Json
+  updatedAt     DateTime @updatedAt
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -280,21 +277,21 @@ model AppSettings {
 
 // Study Report Model
 model StudyReport {
-  id                      String   @id @default(cuid())
-  userId                  String
-  period                  ReportPeriod
-  startDate               DateTime
-  endDate                 DateTime
-  totalStudyTime          Int
-  totalSessions           Int
-  averageSessionDuration  Float
-  tasksCompleted          Int
-  tasksCreated            Int
-  flashcardsReviewed      Int
-  examsTaken              Int
-  averageScore            Float
-  goalsAchieved           Int
-  createdAt               DateTime @default(now())
+  id                     String       @id @default(cuid())
+  userId                 String
+  period                 ReportPeriod
+  startDate              DateTime
+  endDate                DateTime
+  totalStudyTime         Int
+  totalSessions          Int
+  averageSessionDuration Float
+  tasksCompleted         Int
+  tasksCreated           Int
+  flashcardsReviewed     Int
+  examsTaken             Int
+  averageScore           Float
+  goalsAchieved          Int
+  createdAt              DateTime     @default(now())
 
   // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -318,15 +315,15 @@ model FocusTools {
 
 // Spaced Repetition Model
 model SpacedRepetition {
-  id           String   @id @default(cuid())
-  userId       String
-  flashcardId  String
-  interval     Int
-  repetitions  Int
-  easeFactor   Float
-  nextReview   DateTime
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id          String   @id @default(cuid())
+  userId      String
+  flashcardId String
+  interval    Int
+  repetitions Int
+  easeFactor  Float
+  nextReview  DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@map("spaced_repetitions")
 }

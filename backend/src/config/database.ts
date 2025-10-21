@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+/*import mongoose from 'mongoose';
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 
@@ -112,4 +112,4 @@ process.on('SIGTERM', async () => {
 });
 
 // Export do Prisma client para uso direto
-export { getPrismaClient as prisma };
+export { getPrismaClient as prisma };*/

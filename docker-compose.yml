@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  db:
+   
+    image: postgres:latest
+    
+   
+    container_name: meu_postgres_db
+    
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Senha333
+      POSTGRES_DB: stody
+    
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+      
+  
+    restart: unless-stopped
+
+
+volumes:
+  postgres_data:
+    driver: local
