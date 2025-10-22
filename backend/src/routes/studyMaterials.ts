@@ -19,7 +19,7 @@ const router = Router();
 // Configuração do multer para upload de arquivos
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadPath = process.env.UPLOAD_PATH || 'uploads';
+    const uploadPath = process.env['UPLOAD_PATH'] || 'uploads';
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {

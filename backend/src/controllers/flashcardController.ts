@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { FlashcardModel } from '../models/Flashcard';
-import { ApiResponse, PaginatedResponse } from '../types';
+import { ApiResponse, PaginatedResponse, FlashcardQuery, Flashcard} from '../types';
 import { GamificationService } from '../services/gamificationService';
 
 export const createFlashcard = async (req: Request, res: Response<ApiResponse>) => {
@@ -33,7 +33,7 @@ export const createFlashcard = async (req: Request, res: Response<ApiResponse>) 
   }
 };
 
-export const getFlashcards = async (req: Request, res: Response<ApiResponse>) => {
+export const getFlashcards = async (req: Request<{}, {}, {}, FlashcardQuery>, res: Response<ApiResponse>) => {
   try {
     const userId = req.user!.id;
     const page = parseInt(req.query.page as string) || 1;
@@ -65,7 +65,7 @@ export const getFlashcards = async (req: Request, res: Response<ApiResponse>) =>
       FlashcardModel.countDocuments(query)
     ]);
 
-    const result: PaginatedResponse = {
+    const result: PaginatedResponse<Flashcard> = {
       data: flashcards,
       pagination: {
         page,

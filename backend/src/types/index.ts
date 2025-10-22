@@ -150,8 +150,8 @@ export interface ApiResponse<T = any> {
 }
 
 export interface PaginationParams {
-  page?: number;
-  limit?: number;
+  page?: number | string;
+  limit?: number | string;
   sortBy?: string;
   sortOrder?: 'asc' | 'desc';
 }
@@ -159,11 +159,17 @@ export interface PaginationParams {
 export interface PaginatedResponse<T> {
   data: T[];
   pagination: {
-    page: number;
-    limit: number;
-    total: number;
+    page: number | string;
+    limit: number | string;
+    total: number | string;
     totalPages: number;
   };
+}
+export interface FlashcardQuery extends PaginationParams {
+  category?: string;
+  difficulty?: string;
+  isActive?: string;
+  readyForReview?: string; 
 }
 
 export interface Notification {
@@ -252,7 +258,7 @@ export interface Achievement {
   id: string;
   userId: string;
   badgeId: string;
-  unlockedAt: Date;
+  unlockedAt?: string;
   pointsEarned: number;
 }
 
