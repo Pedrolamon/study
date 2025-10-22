@@ -115,6 +115,7 @@ export const getFlashcardById = async (req: Request, res: Response<ApiResponse>)
       message: 'Erro interno do servidor'
     });
   }
+  return;
 };
 
 export const updateFlashcard = async (req: Request, res: Response<ApiResponse>) => {
@@ -153,6 +154,7 @@ export const updateFlashcard = async (req: Request, res: Response<ApiResponse>) 
       message: 'Erro interno do servidor'
     });
   }
+  return;
 };
 
 export const deleteFlashcard = async (req: Request, res: Response<ApiResponse>) => {
@@ -180,6 +182,7 @@ export const deleteFlashcard = async (req: Request, res: Response<ApiResponse>) 
       message: 'Erro interno do servidor'
     });
   }
+  return;
 };
 
 export const reviewFlashcard = async (req: Request, res: Response<ApiResponse>) => {
@@ -222,6 +225,7 @@ export const reviewFlashcard = async (req: Request, res: Response<ApiResponse>) 
       message: 'Erro interno do servidor'
     });
   }
+  return;
 };
 
 export const resetFlashcardReview = async (req: Request, res: Response<ApiResponse>) => {
@@ -253,6 +257,7 @@ export const resetFlashcardReview = async (req: Request, res: Response<ApiRespon
       message: 'Erro interno do servidor'
     });
   }
+  return;
 };
 
 export const getFlashcardStats = async (req: Request, res: Response<ApiResponse>) => {

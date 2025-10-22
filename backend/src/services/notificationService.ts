@@ -1,14 +1,26 @@
-import { NotificationModel } from '../models/Notification';
-import { UserModel } from '../models/User';
 import nodemailer from 'nodemailer';
-import type { Notification } from '../types';
+import { NotificationModel } from '../models';
 
-// Configuração do transporter de email
+interface Notification {
+  id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: 'TASK' | 'STUDY' | 'EXAM' | 'REMINDER' | 'ACHIEVEMENT' | 'SYSTEM';
+  isRead: boolean;
+  isEmailSent: boolean;
+  scheduledFor?: Date;
+  sentAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Email configuration
 const createTransporter = () => {
   return nodemailer.createTransporter({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: false, // true para 465, false para outras portas
+    port: Number(process.env.SMTP_PORT) || 587,
+    secure: false,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
@@ -17,13 +29,15 @@ const createTransporter = () => {
 };
 
 export class NotificationService {
-  // Criar notificação
-  static async createNotification(notificationData: Omit<Notification, '_id' | 'createdAt' | 'updatedAt'>): Promise<Notification> {
-    const notification = new NotificationModel(notificationData);
-    return await notification.save();
+  // Create notification
+  static async createNotification(notificationData: Omit<Notification, 'id' | 'createdAt' | 'updatedAt'>): Promise<Notification> {
+    const notification = await NotificationModel.create({
+      data: notificationData
+    });
+    return notification;
   }
 
-  // Criar notificação agendada
+  // Create scheduled notification
   static async createScheduledNotification(
     userId: string,
     title: string,
@@ -42,86 +56,89 @@ export class NotificationService {
     });
   }
 
-  // Buscar notificações do usuário
-  static async getUserNotifications(
-    userId: string,
-    page: number = 1,
-    limit: number = 20,
-    isRead?: boolean
-  ) {
-    const skip = (page - 1) * limit;
-    const query: any = { userId };
-    
-    if (isRead !== undefined) {
-      query.isRead = isRead;
-    }
+  // Get user notifications
+  static async getUserNotifications(userId: string, limit: number = 20, offset: number = 0) {
+    return await NotificationModel.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+      skip: offset
+    });
+  }
 
-    const [notifications, total] = await Promise.all([
-      NotificationModel.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      NotificationModel.countDocuments(query)
-    ]);
+  // Get unread notifications
+  static async getUnreadNotifications(userId: string) {
+    return await NotificationModel.findMany({
+      where: {
+        userId,
+        isRead: false
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+  }
 
-    return {
-      notifications,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit)
+  // Mark notification as read
+  static async markAsRead(notificationId: string, userId: string): Promise<boolean> {
+    const result = await NotificationModel.updateMany({
+      where: {
+        id: notificationId,
+        userId
+      },
+      data: {
+        isRead: true
       }
-    };
+    });
+
+    return result.count > 0;
   }
 
-  // Marcar notificação como lida
-  static async markAsRead(notificationId: string, userId: string): Promise<void> {
-    await NotificationModel.findOneAndUpdate(
-      { _id: notificationId, userId },
-      { isRead: true }
-    );
+  // Mark all notifications as read
+  static async markAllAsRead(userId: string): Promise<number> {
+    const result = await NotificationModel.updateMany({
+      where: {
+        userId,
+        isRead: false
+      },
+      data: {
+        isRead: true
+      }
+    });
+
+    return result.count;
   }
 
-  // Marcar todas as notificações como lidas
-  static async markAllAsRead(userId: string): Promise<void> {
-    await NotificationModel.updateMany(
-      { userId, isRead: false },
-      { isRead: true }
-    );
+  // Delete notification
+  static async deleteNotification(notificationId: string, userId: string): Promise<boolean> {
+    const result = await NotificationModel.deleteMany({
+      where: {
+        id: notificationId,
+        userId
+      }
+    });
+
+    return result.count > 0;
   }
 
-  // Deletar notificação
-  static async deleteNotification(notificationId: string, userId: string): Promise<void> {
-    await NotificationModel.findOneAndDelete({ _id: notificationId, userId });
-  }
-
-  // Enviar notificação por email
+  // Send email notification
   static async sendEmailNotification(
     userId: string,
     title: string,
-    message: string
+    message: string,
+    email: string
   ): Promise<boolean> {
     try {
-      const user = await UserModel.findById(userId);
-      if (!user || !user.email) {
-        return false;
-      }
-
       const transporter = createTransporter();
       
       const mailOptions = {
         from: process.env.SMTP_USER,
-        to: user.email,
-        subject: `Study App - ${title}`,
+        to: email,
+        subject: title,
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #2563eb;">Study App</h2>
-            <h3>${title}</h3>
-            <p>${message}</p>
-            <hr>
-            <p style="color: #666; font-size: 12px;">
+            <h2 style="color: #333;">${title}</h2>
+            <p style="color: #666; line-height: 1.6;">${message}</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="color: #999; font-size: 12px;">
               Esta é uma notificação automática do Study App.
             </p>
           </div>
@@ -129,114 +146,135 @@ export class NotificationService {
       };
 
       await transporter.sendMail(mailOptions);
+
+      // Mark notification as email sent
+      await NotificationModel.updateMany({
+        where: {
+          userId,
+          title,
+          message
+        },
+        data: {
+          isEmailSent: true,
+          sentAt: new Date()
+        }
+      });
+
       return true;
     } catch (error) {
-      console.error('Erro ao enviar email:', error);
+      console.error('Error sending email notification:', error);
       return false;
     }
   }
 
-  // Processar notificações agendadas
+  // Process scheduled notifications
   static async processScheduledNotifications(): Promise<void> {
-    try {
-      const now = new Date();
-      const scheduledNotifications = await NotificationModel.find({
-        scheduledFor: { $lte: now },
+    const now = new Date();
+    
+    const scheduledNotifications = await NotificationModel.findMany({
+      where: {
+        scheduledFor: { lte: now },
         isEmailSent: false
-      });
-
-      for (const notification of scheduledNotifications) {
-        // Enviar email
-        const emailSent = await this.sendEmailNotification(
-          notification.userId.toString(),
-          notification.title,
-          notification.message
-        );
-
-        if (emailSent) {
-          await notification.markAsEmailSent();
+      },
+      include: {
+        user: {
+          select: {
+            email: true
+          }
         }
       }
-    } catch (error) {
-      console.error('Erro ao processar notificações agendadas:', error);
+    });
+
+    for (const notification of scheduledNotifications) {
+      // Send email if user has email
+      if (notification.user?.email) {
+        await this.sendEmailNotification(
+          notification.userId,
+          notification.title,
+          notification.message,
+          notification.user.email
+        );
+      }
+
+      // Mark as sent
+      await NotificationModel.update({
+        where: { id: notification.id },
+        data: {
+          isEmailSent: true,
+          sentAt: new Date()
+        }
+      });
     }
   }
 
-  // Criar notificação de tarefa
-  static async createTaskNotification(
+  // Create task reminder
+  static async createTaskReminder(
     userId: string,
     taskTitle: string,
-    action: 'created' | 'completed' | 'overdue'
+    dueDate: string,
+    reminderTime: string
   ): Promise<void> {
-    const messages = {
-      created: `Nova tarefa criada: ${taskTitle}`,
-      completed: `Tarefa concluída: ${taskTitle}`,
-      overdue: `Tarefa em atraso: ${taskTitle}`
-    };
-
-    await this.createNotification({
+    const reminderDate = new Date(`${dueDate}T${reminderTime}`);
+    
+    await this.createScheduledNotification(
       userId,
-      title: 'Tarefa',
-      message: messages[action],
-      type: 'task',
-      isRead: false,
-      isEmailSent: false
-    });
+      'Lembrete de Tarefa',
+      `Sua tarefa "${taskTitle}" vence em breve!`,
+      'TASK',
+      reminderDate
+    );
   }
 
-  // Criar notificação de sessão de estudo
-  static async createStudyNotification(
+  // Create study session reminder
+  static async createStudyReminder(
     userId: string,
-    duration: number,
-    subject?: string
+    subject: string,
+    scheduledTime: Date
   ): Promise<void> {
-    const hours = Math.floor(duration / 3600);
-    const minutes = Math.floor((duration % 3600) / 60);
-    const timeStr = hours > 0 ? `${hours}h ${minutes}min` : `${minutes}min`;
-
-    await this.createNotification({
+    await this.createScheduledNotification(
       userId,
-      title: 'Sessão de Estudo',
-      message: `Sessão concluída: ${timeStr}${subject ? ` - ${subject}` : ''}`,
-      type: 'study',
-      isRead: false,
-      isEmailSent: false
-    });
+      'Hora de Estudar!',
+      `É hora da sua sessão de estudo de ${subject}`,
+      'STUDY',
+      scheduledTime
+    );
   }
 
-  // Criar notificação de conquista
-  static async createAchievementNotification(
+  // Create exam reminder
+  static async createExamReminder(
     userId: string,
-    achievement: string
+    examName: string,
+    examDate: Date
   ): Promise<void> {
-    await this.createNotification({
+    await this.createScheduledNotification(
       userId,
-      title: 'Conquista Desbloqueada! 🎉',
-      message: achievement,
-      type: 'achievement',
-      isRead: false,
-      isEmailSent: false
-    });
+      'Lembrete de Exame',
+      `Seu exame "${examName}" está chegando!`,
+      'EXAM',
+      examDate
+    );
   }
 
-  // Obter estatísticas de notificações
+  // Get notification statistics
   static async getNotificationStats(userId: string) {
     const [total, unread, byType] = await Promise.all([
-      NotificationModel.countDocuments({ userId }),
-      NotificationModel.countDocuments({ userId, isRead: false }),
-      NotificationModel.aggregate([
-        { $match: { userId: userId } },
-        { $group: { _id: '$type', count: { $sum: 1 } } }
-      ])
+      NotificationModel.count({ where: { userId } }),
+      NotificationModel.count({ where: { userId, isRead: false } }),
+      NotificationModel.groupBy({
+        by: ['type'],
+        where: { userId },
+        _count: { type: true }
+      })
     ]);
 
     return {
       total,
       unread,
+      read: total - unread,
       byType: byType.reduce((acc, item) => {
-        acc[item._id] = item.count;
+        acc[item.type] = item._count.type;
         return acc;
       }, {} as Record<string, number>)
     };
   }
-} 
+}

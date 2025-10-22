@@ -1,11 +1,4 @@
-import Badge from '../models/Badge';
-import Achievement from '../models/Achievement';
-import UserPoints from '../models/UserPoints';
-import { UserModel as User } from '../models/User';
-import Task from '../models/Task';
-import StudySession from '../models/StudySession';
-import Flashcard from '../models/Flashcard';
-import StudyMaterial from '../models/StudyMaterial';
+import { prisma } from '../models';
 import { NotificationService } from './notificationService';
 
 export class GamificationService {
@@ -27,8 +20,8 @@ export class GamificationService {
   // Add points to user
   static async addPoints(userId: string, points: number, reason: string, source: string): Promise<void> {
     try {
-      const userPoints = await UserPoints.getOrCreateUserPoints(userId);
-      await userPoints.addPoints(points, reason, source);
+      const userPoints = await this.getOrCreateUserPoints(userId);
+      await this.updateUserPoints(userId, points, reason, source);
       
       // Check for achievements
       await this.checkAchievements(userId);
@@ -39,7 +32,7 @@ export class GamificationService {
           userId,
           title: 'Pontos Ganhos!',
           message: `Você ganhou ${points} pontos por: ${reason}`,
-          type: 'achievement'
+          type: 'ACHIEVEMENT'
         });
       }
     } catch (error) {
@@ -50,350 +43,247 @@ export class GamificationService {
 
   // Award points for task completion
   static async awardTaskPoints(userId: string, task: any): Promise<void> {
-    const points = task.completedOnTime ? 
-      this.POINTS_CONFIG.task_completed_on_time : 
-      this.POINTS_CONFIG.task_completed;
+    const points = task.completedOnTime
+      ? this.POINTS_CONFIG.task_completed_on_time
+      : this.POINTS_CONFIG.task_completed;
     
-    const reason = task.completedOnTime ? 
-      'Tarefa concluída no prazo' : 
-      'Tarefa concluída';
-    
-    await this.addPoints(userId, points, reason, 'task');
+    await this.addPoints(userId, points, 'Tarefa concluída', 'task_completion');
   }
 
   // Award points for study session
-  static async awardStudyPoints(userId: string, session: any): Promise<void> {
-    if (!session.endTime || !session.startTime) return;
-    
-    const durationMinutes = Math.floor(
-      (session.endTime.getTime() - session.startTime.getTime()) / (1000 * 60)
-    );
-    
+  static async awardStudySessionPoints(userId: string, session: any): Promise<void> {
+    const duration = session.duration || 0;
     let points = 0;
     let reason = '';
-    
-    if (durationMinutes >= 60) {
+
+    if (duration >= 60) {
       points = this.POINTS_CONFIG.study_session_60min;
       reason = 'Sessão de estudo de 60+ minutos';
-    } else if (durationMinutes >= 30) {
+    } else if (duration >= 30) {
       points = this.POINTS_CONFIG.study_session_30min;
       reason = 'Sessão de estudo de 30+ minutos';
     }
-    
+
     if (points > 0) {
-      await this.addPoints(userId, points, reason, 'study');
-    }
-    
-    // Check for perfect session (25+ minutes focused)
-    if (durationMinutes >= 25) {
-      await this.addPoints(userId, this.POINTS_CONFIG.perfect_session, 'Sessão perfeita', 'study');
+      await this.addPoints(userId, points, reason, 'study_session');
     }
   }
 
   // Award points for flashcard review
-  static async awardFlashcardPoints(userId: string, flashcard: any): Promise<void> {
-    await this.addPoints(userId, this.POINTS_CONFIG.flashcard_reviewed, 'Flashcard revisado', 'flashcard');
+  static async awardFlashcardPoints(userId: string): Promise<void> {
+    await this.addPoints(
+      userId,
+      this.POINTS_CONFIG.flashcard_reviewed,
+      'Flashcard revisado',
+      'flashcard_review'
+    );
   }
 
   // Award points for material upload
-  static async awardMaterialPoints(userId: string, material: any): Promise<void> {
-    await this.addPoints(userId, this.POINTS_CONFIG.material_uploaded, 'Material de estudo enviado', 'material');
+  static async awardMaterialPoints(userId: string): Promise<void> {
+    await this.addPoints(
+      userId,
+      this.POINTS_CONFIG.material_uploaded,
+      'Material de estudo enviado',
+      'material_upload'
+    );
   }
 
   // Check and award streak points
-  static async checkStreakPoints(userId: string): Promise<void> {
-    const user = await User.findById(userId);
-    if (!user || !user.studyStreak) return;
-    
-    const streak = user.studyStreak;
+  static async checkStreakPoints(userId: string, streak: number): Promise<void> {
     let points = 0;
     let reason = '';
-    
+
     if (streak >= 30) {
       points = this.POINTS_CONFIG.streak_30_days;
-      reason = 'Sequência de 30 dias de estudo!';
+      reason = 'Sequência de 30 dias!';
     } else if (streak >= 7) {
       points = this.POINTS_CONFIG.streak_7_days;
-      reason = 'Sequência de 7 dias de estudo!';
+      reason = 'Sequência de 7 dias!';
     } else if (streak >= 3) {
       points = this.POINTS_CONFIG.streak_3_days;
-      reason = 'Sequência de 3 dias de estudo!';
+      reason = 'Sequência de 3 dias!';
     }
-    
+
     if (points > 0) {
       await this.addPoints(userId, points, reason, 'streak');
     }
   }
 
-  // Check for achievements
-  static async checkAchievements(userId: string): Promise<void> {
-    try {
-      const badges = await Badge.getActiveBadges();
-      
-      for (const badge of badges) {
-        // Check if user already has this achievement
-        const hasAchievement = await Achievement.hasAchievement(userId, badge._id.toString());
-        if (hasAchievement) continue;
-        
-        // Check if user meets requirements
-        const progress = await badge.getUserProgress(userId);
-        
-        if (progress.percentage >= 100) {
-          await this.unlockAchievement(userId, badge);
+  // Get or create user points
+  private static async getOrCreateUserPoints(userId: string) {
+    let userPoints = await prisma.userPoints.findUnique({
+      where: { userId }
+    });
+
+    if (!userPoints) {
+      userPoints = await prisma.userPoints.create({
+        data: {
+          userId,
+          totalPoints: 0,
+          level: 1,
+          experience: 0,
+          experienceToNextLevel: 100,
+          pointsHistory: []
+        }
+      });
+    }
+
+    return userPoints;
+  }
+
+  // Update user points
+  private static async updateUserPoints(userId: string, points: number, reason: string, source: string) {
+    const userPoints = await this.getOrCreateUserPoints(userId);
+    
+    const newTotalPoints = userPoints.totalPoints + points;
+    const newExperience = userPoints.experience + points;
+    
+    // Calculate new level
+    let newLevel = userPoints.level;
+    let newExperienceToNextLevel = userPoints.experienceToNextLevel;
+    let remainingExperience = newExperience;
+    
+    while (remainingExperience >= newExperienceToNextLevel) {
+      newLevel++;
+      remainingExperience -= newExperienceToNextLevel;
+      newExperienceToNextLevel = Math.floor(newExperienceToNextLevel * 1.2);
+    }
+
+    const pointsEntry = {
+      date: new Date().toISOString(),
+      points,
+      reason,
+      source
+    };
+
+    await prisma.userPoints.update({
+      where: { userId },
+      data: {
+        totalPoints: newTotalPoints,
+        level: newLevel,
+        experience: remainingExperience,
+        experienceToNextLevel: newExperienceToNextLevel,
+        pointsHistory: {
+          push: pointsEntry
         }
       }
-    } catch (error) {
-      console.error('Error checking achievements:', error);
+    });
+
+    // Check for level up
+    if (newLevel > userPoints.level) {
+      await NotificationService.createNotification({
+        userId,
+        title: 'Level Up!',
+        message: `Parabéns! Você subiu para o nível ${newLevel}!`,
+        type: 'ACHIEVEMENT'
+      });
     }
   }
 
-  // Unlock achievement
-  static async unlockAchievement(userId: string, badge: any): Promise<void> {
-    try {
-      // Create achievement record
-      const achievement = new Achievement({
-        userId,
-        badgeId: badge._id,
-        pointsEarned: badge.pointsReward
+  // Check for achievements
+  private static async checkAchievements(userId: string): Promise<void> {
+    const userPoints = await this.getOrCreateUserPoints(userId);
+    
+    // Check for point-based achievements
+    const pointAchievements = [
+      { threshold: 100, badge: 'first_100_points' },
+      { threshold: 500, badge: 'dedicated_student' },
+      { threshold: 1000, badge: 'study_master' },
+      { threshold: 5000, badge: 'study_legend' }
+    ];
+
+    for (const achievement of pointAchievements) {
+      if (userPoints.totalPoints >= achievement.threshold) {
+        await this.unlockBadge(userId, achievement.badge);
+      }
+    }
+
+    // Check for level-based achievements
+    const levelAchievements = [
+      { level: 5, badge: 'rising_star' },
+      { level: 10, badge: 'knowledge_seeker' },
+      { level: 20, badge: 'study_champion' },
+      { level: 50, badge: 'study_legend' }
+    ];
+
+    for (const achievement of levelAchievements) {
+      if (userPoints.level >= achievement.level) {
+        await this.unlockBadge(userId, achievement.badge);
+      }
+    }
+  }
+
+  // Unlock badge
+  private static async unlockBadge(userId: string, badgeName: string): Promise<void> {
+    // Check if badge already exists
+    const existingBadge = await prisma.badge.findFirst({
+      where: { name: badgeName }
+    });
+
+    if (!existingBadge) {
+      // Create badge if it doesn't exist
+      await prisma.badge.create({
+        data: {
+          name: badgeName,
+          description: `Badge: ${badgeName}`,
+          icon: '🏆',
+          category: 'ACHIEVEMENT',
+          pointsReward: 50,
+          requirements: {}
+        }
       });
-      await achievement.save();
-      
-      // Award badge points
-      await this.addPoints(userId, badge.pointsReward, `Badge desbloqueado: ${badge.name}`, 'badge');
-      
+    }
+
+    // Check if user already has this achievement
+    const existingAchievement = await prisma.achievement.findFirst({
+      where: {
+        userId,
+        badge: { name: badgeName }
+      }
+    });
+
+    if (!existingAchievement) {
+      // Create achievement
+      await prisma.achievement.create({
+        data: {
+          userId,
+          badgeId: existingBadge?.id || '',
+          pointsEarned: 50
+        }
+      });
+
+      // Award points for badge
+      await this.addPoints(userId, this.POINTS_CONFIG.badge_unlocked, `Badge desbloqueado: ${badgeName}`, 'badge_unlock');
+
       // Send notification
       await NotificationService.createNotification({
         userId,
         title: 'Badge Desbloqueado!',
-        message: `Parabéns! Você desbloqueou o badge "${badge.name}"`,
-        type: 'achievement'
+        message: `Parabéns! Você desbloqueou o badge: ${badgeName}`,
+        type: 'ACHIEVEMENT'
       });
-      
-      console.log(`Achievement unlocked: ${badge.name} for user ${userId}`);
-    } catch (error) {
-      console.error('Error unlocking achievement:', error);
     }
   }
 
-  // Get user gamification stats
-  static async getUserStats(userId: string): Promise<any> {
-    try {
-      const userPoints = await UserPoints.getUserPoints(userId);
-      const achievements = await Achievement.getUserAchievements(userId);
-      const badges = await Badge.getActiveBadges();
-      
-      // Get user's unlocked badges
-      const unlockedBadges = await Promise.all(
-        badges.map(async (badge) => {
-          const isUnlocked = await badge.isUnlockedByUser(userId);
-          const progress = await badge.getUserProgress(userId);
-          
-          return {
-            ...badge.toObject(),
-            isUnlocked,
-            progress
-          };
-        })
-      );
-      
-      // Calculate rank
-      const rank = await UserPoints.getUserRank(userId);
-      const totalUsers = await UserPoints.countDocuments();
-      
-      return {
-        userPoints: userPoints?.toObject() || null,
-        achievements: achievements.map(a => a.toObject()),
-        badges: unlockedBadges,
-        rank,
-        totalUsers,
-        levelProgress: userPoints?.getLevelProgress() || 0,
-        pointsBySource: userPoints?.getPointsBySource() || {},
-        recentHistory: userPoints?.getRecentHistory(10) || []
-      };
-    } catch (error) {
-      console.error('Error getting user stats:', error);
-      throw error;
-    }
-  }
+  // Get user statistics
+  static async getUserStats(userId: string) {
+    const userPoints = await this.getOrCreateUserPoints(userId);
+    
+    const [achievements, badges] = await Promise.all([
+      prisma.achievement.findMany({
+        where: { userId },
+        include: { badge: true }
+      }),
+      prisma.badge.findMany()
+    ]);
 
-  // Get leaderboard
-  static async getLeaderboard(limit: number = 50): Promise<any[]> {
-    try {
-      const leaderboard = await UserPoints.getLeaderboard(limit);
-      
-      return leaderboard.map((entry, index) => ({
-        rank: index + 1,
-        userId: entry.userId,
-        username: entry.user?.username || 'Usuário',
-        totalPoints: entry.totalPoints,
-        level: entry.level,
-        experience: entry.experience,
-        experienceToNextLevel: entry.experienceToNextLevel
-      }));
-    } catch (error) {
-      console.error('Error getting leaderboard:', error);
-      throw error;
-    }
-  }
-
-  // Get top users by level
-  static async getTopByLevel(limit: number = 10): Promise<any[]> {
-    try {
-      const topUsers = await UserPoints.getTopByLevel(limit);
-      
-      return topUsers.map((entry, index) => ({
-        rank: index + 1,
-        userId: entry.userId,
-        username: entry.user?.username || 'Usuário',
-        level: entry.level,
-        experience: entry.experience,
-        totalPoints: entry.totalPoints
-      }));
-    } catch (error) {
-      console.error('Error getting top by level:', error);
-      throw error;
-    }
-  }
-
-  // Get recent achievements
-  static async getRecentAchievements(limit: number = 10): Promise<any[]> {
-    try {
-      const achievements = await Achievement.getRecentAchievements(limit);
-      
-      return achievements.map(achievement => ({
-        id: achievement._id,
-        userId: achievement.userId,
-        username: achievement.user?.username || 'Usuário',
-        badgeName: achievement.badge?.name || 'Badge',
-        badgeIcon: achievement.badge?.icon || '',
-        pointsEarned: achievement.pointsEarned,
-        unlockedAt: achievement.unlockedAt
-      }));
-    } catch (error) {
-      console.error('Error getting recent achievements:', error);
-      throw error;
-    }
-  }
-
-  // Get badge progress for user
-  static async getBadgeProgress(userId: string): Promise<any[]> {
-    try {
-      const badges = await Badge.getActiveBadges();
-      
-      const progress = await Promise.all(
-        badges.map(async (badge) => {
-          const isUnlocked = await badge.isUnlockedByUser(userId);
-          const userProgress = await badge.getUserProgress(userId);
-          
-          return {
-            id: badge._id,
-            name: badge.name,
-            description: badge.description,
-            icon: badge.icon,
-            category: badge.category,
-            pointsReward: badge.pointsReward,
-            isUnlocked,
-            progress: userProgress
-          };
-        })
-      );
-      
-      return progress;
-    } catch (error) {
-      console.error('Error getting badge progress:', error);
-      throw error;
-    }
-  }
-
-  // Initialize default badges
-  static async initializeDefaultBadges(): Promise<void> {
-    try {
-      const defaultBadges = [
-        {
-          name: 'Primeiro Passo',
-          description: 'Complete sua primeira tarefa',
-          icon: '🎯',
-          category: 'achievement',
-          pointsReward: 50,
-          requirements: { type: 'tasks_completed', value: 1 }
-        },
-        {
-          name: 'Estudioso',
-          description: 'Complete 10 tarefas',
-          icon: '📚',
-          category: 'study',
-          pointsReward: 100,
-          requirements: { type: 'tasks_completed', value: 10 }
-        },
-        {
-          name: 'Mestre',
-          description: 'Complete 50 tarefas',
-          icon: '👑',
-          category: 'achievement',
-          pointsReward: 500,
-          requirements: { type: 'tasks_completed', value: 50 }
-        },
-        {
-          name: 'Focado',
-          description: 'Estude por 30 minutos',
-          icon: '⏰',
-          category: 'study',
-          pointsReward: 75,
-          requirements: { type: 'study_time', value: 30 }
-        },
-        {
-          name: 'Maratonista',
-          description: 'Estude por 2 horas',
-          icon: '🏃',
-          category: 'study',
-          pointsReward: 200,
-          requirements: { type: 'study_time', value: 120 }
-        },
-        {
-          name: 'Flashcard Master',
-          description: 'Revise 50 flashcards',
-          icon: '🗂️',
-          category: 'study',
-          pointsReward: 150,
-          requirements: { type: 'flashcards_reviewed', value: 50 }
-        },
-        {
-          name: 'Organizador',
-          description: 'Faça upload de 5 materiais',
-          icon: '📁',
-          category: 'achievement',
-          pointsReward: 100,
-          requirements: { type: 'materials_uploaded', value: 5 }
-        },
-        {
-          name: 'Consistente',
-          description: 'Mantenha uma sequência de 7 dias',
-          icon: '🔥',
-          category: 'social',
-          pointsReward: 300,
-          requirements: { type: 'streak_days', value: 7 }
-        },
-        {
-          name: 'Perfeccionista',
-          description: 'Complete 10 sessões perfeitas',
-          icon: '⭐',
-          category: 'special',
-          pointsReward: 400,
-          requirements: { type: 'perfect_sessions', value: 10 }
-        }
-      ];
-      
-      for (const badgeData of defaultBadges) {
-        const existingBadge = await Badge.findOne({ name: badgeData.name });
-        if (!existingBadge) {
-          const badge = new Badge(badgeData);
-          await badge.save();
-        }
-      }
-      
-      console.log('Default badges initialized');
-    } catch (error) {
-      console.error('Error initializing default badges:', error);
-    }
+    return {
+      userPoints,
+      achievements,
+      totalBadges: badges.length,
+      unlockedBadges: achievements.length,
+      completionRate: badges.length > 0 ? (achievements.length / badges.length) * 100 : 0
+    };
   }
 }

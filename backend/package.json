@@ -69,7 +69,8 @@
     "backend",
     "nodejs",
     "express",
-    "mongodb"
+    "postgresql",
+    "prisma"
   ],
   "author": "Study App",
   "license": "MIT"

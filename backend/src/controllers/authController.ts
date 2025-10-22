@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import jwt, { SignOptions, Secret } from 'jsonwebtoken';
+import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { UserModel } from '../models';
 import type { AuthResponse } from '../types';

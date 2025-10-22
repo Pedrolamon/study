@@ -1,265 +1,232 @@
 import cron from 'node-cron';
 import { NotificationService } from './notificationService';
 import { GamificationService } from './gamificationService';
-import { TaskModel } from '../models/Task';
-import { StudySessionModel } from '../models/StudySession';
-import { NotificationModel } from '../models/Notification';
-import { UserModel } from '../models/User';
+import { prisma } from '../models';
 
 export class SchedulerService {
   private static isInitialized = false;
 
-  // Inicializar todos os agendamentos
+  // Initialize all schedulers
   static initializeSchedulers() {
     if (this.isInitialized) {
-      console.log('Schedulers já foram inicializados');
+      console.log('Schedulers already initialized');
       return;
     }
 
-    console.log('🚀 Inicializando agendadores...');
+    console.log('🚀 Initializing schedulers...');
 
-    // Processar notificações agendadas a cada 5 minutos
+    // Process scheduled notifications every 5 minutes
     this.scheduleNotificationProcessing();
 
-    // Verificar tarefas em atraso diariamente às 9h
+    // Check overdue tasks daily at 9 AM
     this.scheduleOverdueTaskCheck();
 
-    // Verificar sessões de estudo ativas a cada hora
+    // Check active study sessions every hour
     this.scheduleActiveSessionCheck();
 
-    // Verificar pontos de sequência diariamente
+    // Check streak points daily
     this.scheduleStreakCheck();
 
-    // Limpeza de dados antigos semanalmente
+    // Data cleanup weekly
     this.scheduleDataCleanup();
 
     this.isInitialized = true;
-    console.log('✅ Agendadores inicializados com sucesso');
+    console.log('✅ Schedulers initialized successfully');
   }
 
-  // Agendar processamento de notificações
+  // Schedule notification processing
   private static scheduleNotificationProcessing() {
-    // Executar a cada 5 minutos
+    // Run every 5 minutes
     cron.schedule('*/5 * * * *', async () => {
       try {
-        console.log('📧 Processando notificações agendadas...');
         await NotificationService.processScheduledNotifications();
+        console.log('📧 Processed scheduled notifications');
       } catch (error) {
-        console.error('❌ Erro ao processar notificações agendadas:', error);
+        console.error('Error processing scheduled notifications:', error);
       }
     });
   }
 
-  // Agendar verificação de tarefas em atraso
+  // Schedule overdue task check
   private static scheduleOverdueTaskCheck() {
-    // Executar diariamente às 9h
+    // Run daily at 9 AM
     cron.schedule('0 9 * * *', async () => {
       try {
-        console.log('⏰ Verificando tarefas em atraso...');
-        await this.checkOverdueTasks();
+        const today = new Date().toISOString().split('T')[0];
+        
+        const overdueTasks = await prisma.task.findMany({
+          where: {
+            completed: false,
+            dueDate: { lt: today }
+          },
+          include: {
+            user: true
+          }
+        });
+
+        for (const task of overdueTasks) {
+          await NotificationService.createNotification({
+            userId: task.userId,
+            title: 'Tarefa em Atraso',
+            message: `Sua tarefa "${task.title}" está em atraso!`,
+            type: 'TASK',
+            isRead: false,
+            isEmailSent: false
+          });
+        }
+
+        console.log(`📋 Checked ${overdueTasks.length} overdue tasks`);
       } catch (error) {
-        console.error('❌ Erro ao verificar tarefas em atraso:', error);
+        console.error('Error checking overdue tasks:', error);
       }
     });
   }
 
-  // Agendar verificação de sessões ativas
+  // Schedule active session check
   private static scheduleActiveSessionCheck() {
-    // Executar a cada hora
+    // Run every hour
     cron.schedule('0 * * * *', async () => {
       try {
-        console.log('⏱️ Verificando sessões de estudo ativas...');
-        await this.checkActiveSessions();
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        
+        const longSessions = await prisma.studySession.findMany({
+          where: {
+            isActive: true,
+            startTime: { lte: oneHourAgo }
+          },
+          include: {
+            user: true
+          }
+        });
+
+        for (const session of longSessions) {
+          await NotificationService.createNotification({
+            userId: session.userId,
+            title: 'Sessão Longa Detectada',
+            message: `Você está estudando há mais de 1 hora. Que tal uma pausa?`,
+            type: 'STUDY',
+            isRead: false,
+            isEmailSent: false
+          });
+        }
+
+        console.log(`⏰ Checked ${longSessions.length} long study sessions`);
       } catch (error) {
-        console.error('❌ Erro ao verificar sessões ativas:', error);
+        console.error('Error checking active sessions:', error);
       }
     });
   }
 
-  // Agendar verificação de pontos de sequência
+  // Schedule streak check
   private static scheduleStreakCheck() {
-    // Executar diariamente às 8h
-    cron.schedule('0 8 * * *', async () => {
+    // Run daily at midnight
+    cron.schedule('0 0 * * *', async () => {
       try {
-        console.log('🔥 Verificando pontos de sequência...');
-        await this.checkStreakPoints();
+        const users = await prisma.user.findMany({
+          where: { isActive: true }
+        });
+
+        for (const user of users) {
+          // Check if user studied yesterday
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          yesterday.setHours(0, 0, 0, 0);
+          
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+
+          const studySessions = await prisma.studySession.findMany({
+            where: {
+              userId: user.id,
+              endTime: {
+                gte: yesterday,
+                lt: today
+              }
+            }
+          });
+
+          if (studySessions.length > 0) {
+            // User studied yesterday, check streak
+            const userPoints = await prisma.userPoints.findUnique({
+              where: { userId: user.id }
+            });
+
+            if (userPoints) {
+              // Update streak logic here
+              // This would need to be implemented based on your streak logic
+              await GamificationService.checkStreakPoints(user.id, userPoints.level);
+            }
+          }
+        }
+
+        console.log('🔥 Checked study streaks for all users');
       } catch (error) {
-        console.error('❌ Erro ao verificar pontos de sequência:', error);
+        console.error('Error checking streaks:', error);
       }
     });
   }
 
-  // Agendar limpeza de dados antigos
+  // Schedule data cleanup
   private static scheduleDataCleanup() {
-    // Executar semanalmente no domingo às 2h
+    // Run weekly on Sunday at 2 AM
     cron.schedule('0 2 * * 0', async () => {
       try {
-        console.log('🧹 Executando limpeza de dados antigos...');
-        await this.cleanupOldData();
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+        // Clean up old notifications
+        const deletedNotifications = await prisma.notification.deleteMany({
+          where: {
+            createdAt: { lt: sixMonthsAgo },
+            isRead: true
+          }
+        });
+
+        // Clean up old study sessions
+        const deletedSessions = await prisma.studySession.deleteMany({
+          where: {
+            endTime: { lt: sixMonthsAgo }
+          }
+        });
+
+        console.log(`🧹 Cleaned up ${deletedNotifications.count} old notifications and ${deletedSessions.count} old study sessions`);
       } catch (error) {
-        console.error('❌ Erro ao limpar dados antigos:', error);
+        console.error('Error during data cleanup:', error);
       }
     });
   }
 
-  // Verificar tarefas em atraso
-  private static async checkOverdueTasks() {
-    try {
-      const overdueTasks = await TaskModel.find({
+  // Manual notification processing (for testing)
+  static async processNotificationsNow(): Promise<void> {
+    await NotificationService.processScheduledNotifications();
+  }
+
+  // Manual overdue task check (for testing)
+  static async checkOverdueTasksNow(): Promise<void> {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const overdueTasks = await prisma.task.findMany({
+      where: {
         completed: false,
-        dueDate: { $lt: new Date() }
-      }).populate('userId', 'email name');
-
-      for (const task of overdueTasks) {
-        // Criar notificação para tarefa em atraso
-        await NotificationService.createTaskNotification(
-          task.userId.toString(),
-          task.title,
-          'overdue'
-        );
-
-        // Enviar email se configurado
-        if (process.env.NOTIFICATION_EMAIL_ENABLED === 'true') {
-          await NotificationService.sendEmailNotification(
-            task.userId.toString(),
-            'Tarefa em Atraso',
-            `A tarefa "${task.title}" está em atraso desde ${task.dueDate.toLocaleDateString()}.`
-          );
-        }
+        dueDate: { lt: today }
       }
+    });
 
-      console.log(`📋 ${overdueTasks.length} tarefas em atraso processadas`);
-    } catch (error) {
-      console.error('Erro ao verificar tarefas em atraso:', error);
-    }
+    console.log(`Found ${overdueTasks.length} overdue tasks`);
+    return;
   }
 
-  // Verificar sessões de estudo ativas
-  private static async checkActiveSessions() {
-    try {
-      const activeSessions = await StudySessionModel.find({
-        isActive: true,
-        startTime: { $lt: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Sessões com mais de 24h
-      }).populate('userId', 'email name');
-
-      for (const session of activeSessions) {
-        // Finalizar sessões muito antigas
-        session.isActive = false;
-        session.endTime = new Date();
-        session.duration = Math.floor((session.endTime.getTime() - session.startTime.getTime()) / 1000);
-        await session.save();
-
-        // Criar notificação
-        await NotificationService.createStudyNotification(
-          session.userId.toString(),
-          session.duration,
-          session.subject
-        );
-      }
-
-      console.log(`⏱️ ${activeSessions.length} sessões antigas finalizadas`);
-    } catch (error) {
-      console.error('Erro ao verificar sessões ativas:', error);
-    }
+  // Get scheduler status
+  static getStatus() {
+    return {
+      initialized: this.isInitialized,
+      schedulers: [
+        'notification_processing',
+        'overdue_task_check',
+        'active_session_check',
+        'streak_check',
+        'data_cleanup'
+      ]
+    };
   }
-
-  // Verificar pontos de sequência
-  private static async checkStreakPoints() {
-    try {
-      const users = await UserModel.find({ studyStreak: { $gt: 0 } });
-      
-      for (const user of users) {
-        await GamificationService.checkStreakPoints(user._id.toString());
-      }
-      
-      console.log(`🔥 Verificação de sequência concluída para ${users.length} usuários`);
-    } catch (error) {
-      console.error('❌ Erro ao verificar pontos de sequência:', error);
-    }
-  }
-
-  // Limpeza de dados antigos
-  private static async cleanupOldData() {
-    try {
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000);
-
-      // Limpar notificações antigas (mais de 30 dias)
-      const deletedNotifications = await NotificationModel.deleteMany({
-        createdAt: { $lt: thirtyDaysAgo },
-        isRead: true
-      });
-
-      // Limpar sessões de estudo antigas (mais de 6 meses)
-      const deletedSessions = await StudySessionModel.deleteMany({
-        endTime: { $lt: sixMonthsAgo }
-      });
-
-      console.log(`🧹 Limpeza concluída: ${deletedNotifications.deletedCount} notificações, ${deletedSessions.deletedCount} sessões`);
-    } catch (error) {
-      console.error('Erro ao limpar dados antigos:', error);
-    }
-  }
-
-  // Agendar notificação personalizada
-  static async scheduleCustomNotification(
-    userId: string,
-    title: string,
-    message: string,
-    type: 'task' | 'study' | 'exam' | 'reminder' | 'achievement' | 'system',
-    scheduledFor: Date
-  ) {
-    try {
-      await NotificationService.createScheduledNotification(
-        userId,
-        title,
-        message,
-        type,
-        scheduledFor
-      );
-      console.log(`📅 Notificação agendada para ${scheduledFor}`);
-    } catch (error) {
-      console.error('Erro ao agendar notificação:', error);
-      throw error;
-    }
-  }
-
-  // Agendar lembretes de tarefas
-  static async scheduleTaskReminders(userId: string, taskId: string, taskTitle: string, dueDate: Date) {
-    try {
-      // Lembrete 1 dia antes
-      const oneDayBefore = new Date(dueDate.getTime() - 24 * 60 * 60 * 1000);
-      if (oneDayBefore > new Date()) {
-        await this.scheduleCustomNotification(
-          userId,
-          'Lembrete de Tarefa',
-          `A tarefa "${taskTitle}" vence amanhã.`,
-          'task',
-          oneDayBefore
-        );
-      }
-
-      // Lembrete 1 hora antes
-      const oneHourBefore = new Date(dueDate.getTime() - 60 * 60 * 1000);
-      if (oneHourBefore > new Date()) {
-        await this.scheduleCustomNotification(
-          userId,
-          'Tarefa Vencendo',
-          `A tarefa "${taskTitle}" vence em 1 hora.`,
-          'task',
-          oneHourBefore
-        );
-      }
-    } catch (error) {
-      console.error('Erro ao agendar lembretes de tarefa:', error);
-    }
-  }
-
-  // Parar todos os agendamentos
-  static stopAllSchedulers() {
-    console.log('🛑 Parando todos os agendadores...');
-    cron.getTasks().forEach(task => task.stop());
-    this.isInitialized = false;
-    console.log('✅ Agendadores parados');
-  }
-} 
+}

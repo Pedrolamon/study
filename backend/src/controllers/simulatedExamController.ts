@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
-import { SimulatedExamModel, ExamResultModel, QuestionModel } from '../models/SimulatedExam';
-import { UserModel } from '../models/User';
+import { SimulatedExamModel } from '../models';
 
 interface AuthRequest extends Request {
   user?: any;
@@ -11,14 +10,23 @@ export const getExams = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     const { subject } = req.query;
 
-    let query: any = { userId };
+    let whereClause: any = { userId };
     if (subject) {
-      query.subject = subject;
+      whereClause.subject = subject;
     }
 
-    const exams = await SimulatedExamModel.find(query)
-      .sort({ createdAt: -1 })
-      .populate('userId', 'name email');
+    const exams = await SimulatedExamModel.findMany({
+      where: whereClause,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      }
+    });
 
     res.json(exams);
   } catch (error) {
@@ -32,8 +40,17 @@ export const getExam = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.id;
 
-    const exam = await SimulatedExamModel.findOne({ _id: id, userId })
-      .populate('userId', 'name email');
+    const exam = await SimulatedExamModel.findFirst({
+      where: { id, userId },
+      include: {
+        user: {
+          select: {
+            name: true,
+            email: true
+          }
+        }
+      }
+    });
 
     if (!exam) {
       return res.status(404).json({ message: 'Simulado não encontrado' });
@@ -49,38 +66,26 @@ export const getExam = async (req: AuthRequest, res: Response) => {
 export const createExam = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
-    const { title, description, subject, duration, passingScore, questions } = req.body;
+    const { name, date, subject, correctAnswers, totalQuestions, duration } = req.body;
 
     // Validate required fields
-    if (!title || !subject || !duration || passingScore === undefined) {
+    if (!name || !date || !subject || correctAnswers === undefined || totalQuestions === undefined) {
       return res.status(400).json({ message: 'Campos obrigatórios não preenchidos' });
     }
 
-    // Validate questions if provided
-    if (questions && questions.length > 0) {
-      for (const question of questions) {
-        if (!question.text || !question.options || question.correctAnswer === undefined) {
-          return res.status(400).json({ message: 'Questão inválida: texto, opções e resposta correta são obrigatórios' });
-        }
-        if (question.correctAnswer < 0 || question.correctAnswer >= question.options.length) {
-          return res.status(400).json({ message: 'Resposta correta inválida' });
-        }
-      }
-    }
-
     const examData = {
-      title,
-      description,
+      name,
+      date,
       subject,
-      questions: questions || [],
+      correctAnswers,
+      totalQuestions,
       duration,
-      totalQuestions: questions ? questions.length : 0,
-      passingScore,
       userId
     };
 
-    const exam = new SimulatedExamModel(examData);
-    await exam.save();
+    const exam = await SimulatedExamModel.create({
+      data: examData
+    });
 
     res.status(201).json(exam);
   } catch (error) {
@@ -96,21 +101,24 @@ export const updateExam = async (req: AuthRequest, res: Response) => {
     const updates = req.body;
 
     // Remove fields that shouldn't be updated
-    delete updates._id;
+    delete updates.id;
     delete updates.userId;
     delete updates.createdAt;
 
-    const exam = await SimulatedExamModel.findOneAndUpdate(
-      { _id: id, userId },
-      updates,
-      { new: true, runValidators: true }
-    );
+    const exam = await SimulatedExamModel.updateMany({
+      where: { id, userId },
+      data: updates
+    });
 
-    if (!exam) {
+    if (exam.count === 0) {
       return res.status(404).json({ message: 'Simulado não encontrado' });
     }
 
-    res.json(exam);
+    const updatedExam = await SimulatedExamModel.findUnique({
+      where: { id }
+    });
+
+    res.json(updatedExam);
   } catch (error) {
     console.error('Erro ao atualizar simulado:', error);
     res.status(500).json({ message: 'Erro interno do servidor' });
@@ -122,14 +130,13 @@ export const deleteExam = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.id;
 
-    const exam = await SimulatedExamModel.findOneAndDelete({ _id: id, userId });
+    const exam = await SimulatedExamModel.deleteMany({
+      where: { id, userId }
+    });
 
-    if (!exam) {
+    if (exam.count === 0) {
       return res.status(404).json({ message: 'Simulado não encontrado' });
     }
-
-    // Delete associated results
-    await ExamResultModel.deleteMany({ examId: id });
 
     res.json({ message: 'Simulado excluído com sucesso' });
   } catch (error) {
@@ -138,156 +145,54 @@ export const deleteExam = async (req: AuthRequest, res: Response) => {
   }
 };
 
-export const submitExamResult = async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user?.id;
-    const { answers, timeSpent } = req.body;
-
-    if (!answers || !Array.isArray(answers)) {
-      return res.status(400).json({ message: 'Respostas são obrigatórias' });
-    }
-
-    // Get the exam
-    const exam = await SimulatedExamModel.findById(id);
-    if (!exam) {
-      return res.status(404).json({ message: 'Simulado não encontrado' });
-    }
-
-    // Calculate score
-    let correctAnswers = 0;
-    const validatedAnswers = [];
-
-    for (const answer of answers) {
-      const question = exam.questions.find(q => q._id?.toString() === answer.questionId);
-      if (question) {
-        const isCorrect = question.correctAnswer === answer.selectedAnswer;
-        if (isCorrect) correctAnswers++;
-
-        validatedAnswers.push({
-          questionId: answer.questionId,
-          selectedAnswer: answer.selectedAnswer,
-          isCorrect
-        });
-      }
-    }
-
-    const score = exam.totalQuestions > 0 ? Math.round((correctAnswers / exam.totalQuestions) * 100) : 0;
-
-    // Save result
-    const result = new ExamResultModel({
-      examId: id,
-      userId,
-      answers: validatedAnswers,
-      score,
-      correctAnswers,
-      totalQuestions: exam.totalQuestions,
-      timeSpent: timeSpent || 0,
-      completedAt: new Date()
-    });
-
-    await result.save();
-
-    // Update user stats if needed (gamification)
-    // This could trigger achievements, update streaks, etc.
-
-    res.status(201).json(result);
-  } catch (error) {
-    console.error('Erro ao submeter resultado:', error);
-    res.status(500).json({ message: 'Erro interno do servidor' });
-  }
-};
-
-export const getExamResults = async (req: AuthRequest, res: Response) => {
-  try {
-    const userId = req.user?.id;
-
-    const results = await ExamResultModel.find({ userId })
-      .populate('examId', 'title subject duration')
-      .sort({ completedAt: -1 });
-
-    res.json(results);
-  } catch (error) {
-    console.error('Erro ao buscar resultados:', error);
-    res.status(500).json({ message: 'Erro interno do servidor' });
-  }
-};
-
-export const getExamResult = async (req: AuthRequest, res: Response) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user?.id;
-
-    const result = await ExamResultModel.findOne({ _id: id, userId })
-      .populate('examId', 'title subject duration questions')
-      .populate('userId', 'name email');
-
-    if (!result) {
-      return res.status(404).json({ message: 'Resultado não encontrado' });
-    }
-
-    res.json(result);
-  } catch (error) {
-    console.error('Erro ao buscar resultado:', error);
-    res.status(500).json({ message: 'Erro interno do servidor' });
-  }
-};
-
 export const getExamStats = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
 
-    const results = await ExamResultModel.find({ userId });
+    const results = await SimulatedExamModel.findMany({
+      where: { userId }
+    });
 
     if (results.length === 0) {
       return res.json({
         totalExams: 0,
-        completedExams: 0,
         averageScore: 0,
         bestScore: 0,
-        totalTimeSpent: 0,
         subjects: []
       });
     }
 
-    const totalExams = await SimulatedExamModel.countDocuments({ userId });
-    const completedExams = results.length;
-    const averageScore = Math.round(results.reduce((sum, r) => sum + r.score, 0) / results.length);
-    const bestScore = Math.max(...results.map(r => r.score));
-    const totalTimeSpent = results.reduce((sum, r) => sum + r.timeSpent, 0);
+    const totalExams = results.length;
+    const averageScore = Math.round(
+      results.reduce((sum, r) => sum + (r.correctAnswers / r.totalQuestions * 100), 0) / results.length
+    );
+    const bestScore = Math.max(
+      ...results.map(r => Math.round(r.correctAnswers / r.totalQuestions * 100))
+    );
 
     // Group by subject
-    const subjectStats = await SimulatedExamModel.aggregate([
-      { $match: { userId: userId } },
-      {
-        $lookup: {
-          from: 'examresults',
-          localField: '_id',
-          foreignField: 'examId',
-          as: 'results'
-        }
-      },
-      {
-        $group: {
-          _id: '$subject',
-          count: { $sum: 1 },
-          averageScore: { $avg: '$results.score' }
-        }
+    const subjectStats = results.reduce((acc: any, exam) => {
+      if (!acc[exam.subject]) {
+        acc[exam.subject] = {
+          count: 0,
+          totalScore: 0
+        };
       }
-    ]);
+      acc[exam.subject].count++;
+      acc[exam.subject].totalScore += exam.correctAnswers / exam.totalQuestions * 100;
+      return acc;
+    }, {});
 
-    const subjects = subjectStats.map(stat => ({
-      name: stat._id,
-      count: stat.count,
-      averageScore: Math.round(stat.averageScore || 0)
+    const subjects = Object.entries(subjectStats).map(([name, stats]: [string, any]) => ({
+      name,
+      count: stats.count,
+      averageScore: Math.round(stats.totalScore / stats.count)
     }));
 
     res.json({
       totalExams,
-      completedExams,
       averageScore,
       bestScore,
-      totalTimeSpent,
       subjects
     });
   } catch (error) {
@@ -301,8 +206,10 @@ export const getExamsBySubject = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     const { subject } = req.params;
 
-    const exams = await SimulatedExamModel.find({ userId, subject })
-      .sort({ createdAt: -1 });
+    const exams = await SimulatedExamModel.findMany({
+      where: { userId, subject },
+      orderBy: { createdAt: 'desc' }
+    });
 
     res.json(exams);
   } catch (error) {

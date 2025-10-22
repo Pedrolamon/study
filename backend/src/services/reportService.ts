@@ -1,9 +1,5 @@
-import { TaskModel } from '../models/Task';
-import { StudySessionModel } from '../models/StudySession';
-import { FlashcardModel } from '../models/Flashcard';
-import { NotificationModel } from '../models/Notification';
-import { StudyMaterialModel } from '../models/StudyMaterial';
-import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, subWeeks, subMonths } from 'date-fns';
+import { prisma } from '../models';
+import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns';
 
 export class ReportService {
   // Relatório geral do usuário
@@ -42,18 +38,47 @@ export class ReportService {
       flashcardsReviewed,
       notificationsReceived
     ] = await Promise.all([
-      TaskModel.countDocuments({ userId, createdAt: { $gte: startDate, $lte: endDate } }),
-      TaskModel.countDocuments({ userId, completed: true, updatedAt: { $gte: startDate, $lte: endDate } }),
-      StudySessionModel.countDocuments({ userId, endTime: { $gte: startDate, $lte: endDate } }),
-      StudySessionModel.aggregate([
-        { $match: { userId, endTime: { $gte: startDate, $lte: endDate } } },
-        { $group: { _id: null, totalTime: { $sum: '$duration' } } }
-      ]),
-      FlashcardModel.countDocuments({ userId, lastReviewed: { $gte: startDate, $lte: endDate } }),
-      NotificationModel.countDocuments({ userId, createdAt: { $gte: startDate, $lte: endDate } })
+      prisma.task.count({
+        where: {
+          userId,
+          createdAt: { gte: startDate, lte: endDate }
+        }
+      }),
+      prisma.task.count({
+        where: {
+          userId,
+          completed: true,
+          updatedAt: { gte: startDate, lte: endDate }
+        }
+      }),
+      prisma.studySession.count({
+        where: {
+          userId,
+          endTime: { gte: startDate, lte: endDate }
+        }
+      }),
+      prisma.studySession.aggregate({
+        where: {
+          userId,
+          endTime: { gte: startDate, lte: endDate }
+        },
+        _sum: { duration: true }
+      }),
+      prisma.flashcard.count({
+        where: {
+          userId,
+          lastReviewed: { gte: startDate, lte: endDate }
+        }
+      }),
+      prisma.notification.count({
+        where: {
+          userId,
+          createdAt: { gte: startDate, lte: endDate }
+        }
+      })
     ]);
 
-    const totalStudyTimeHours = totalStudyTime[0]?.totalTime ? totalStudyTime[0].totalTime / 3600 : 0;
+    const totalStudyTimeHours = totalStudyTime._sum.duration ? totalStudyTime._sum.duration / 60 : 0;
 
     return {
       period,
@@ -83,233 +108,194 @@ export class ReportService {
     const endDate = new Date();
     const startDate = subDays(endDate, days);
 
-    const dailyData = await StudySessionModel.aggregate([
-      { $match: { userId, endTime: { $gte: startDate, $lte: endDate } } },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: '%Y-%m-%d', date: '$endTime' }
-          },
-          studyTime: { $sum: '$duration' },
-          sessions: { $sum: 1 }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]);
+    const dailyData = [];
+    
+    for (let i = 0; i < days; i++) {
+      const date = subDays(endDate, i);
+      const dayStart = startOfDay(date);
+      const dayEnd = endOfDay(date);
 
-    const taskData = await TaskModel.aggregate([
-      { $match: { userId, updatedAt: { $gte: startDate, $lte: endDate } } },
-      {
-        $group: {
-          _id: {
-            $dateToString: { format: '%Y-%m-%d', date: '$updatedAt' }
+      const [tasksCompleted, studyTime, flashcardsReviewed] = await Promise.all([
+        prisma.task.count({
+          where: {
+            userId,
+            completed: true,
+            updatedAt: { gte: dayStart, lte: dayEnd }
+          }
+        }),
+        prisma.studySession.aggregate({
+          where: {
+            userId,
+            endTime: { gte: dayStart, lte: dayEnd }
           },
-          completed: {
-            $sum: { $cond: ['$completed', 1, 0] }
-          },
-          created: { $sum: 1 }
-        }
-      },
-      { $sort: { _id: 1 } }
-    ]);
+          _sum: { duration: true }
+        }),
+        prisma.flashcard.count({
+          where: {
+            userId,
+            lastReviewed: { gte: dayStart, lte: dayEnd }
+          }
+        })
+      ]);
+
+      dailyData.push({
+        date: dayStart,
+        tasksCompleted,
+        studyTimeMinutes: studyTime._sum.duration || 0,
+        flashcardsReviewed
+      });
+    }
 
     return {
       period: `${days} days`,
-      studyData: dailyData,
-      taskData: taskData
+      startDate,
+      endDate,
+      dailyData: dailyData.reverse()
     };
   }
 
-  // Relatório de performance em flashcards
-  static async getFlashcardReport(userId: string) {
-    const [total, active, readyForReview, byDifficulty, byCategory, reviewStats] = await Promise.all([
-      FlashcardModel.countDocuments({ userId }),
-      FlashcardModel.countDocuments({ userId, isActive: true }),
-      FlashcardModel.countDocuments({
-        userId,
-        $or: [
-          { nextReview: { $exists: false } },
-          { nextReview: { $lte: new Date() } }
-        ]
-      }),
-      FlashcardModel.aggregate([
-        { $match: { userId } },
-        { $group: { _id: '$difficulty', count: { $sum: 1 } } }
-      ]),
-      FlashcardModel.aggregate([
-        { $match: { userId } },
-        { $group: { _id: '$category', count: { $sum: 1 } } }
-      ]),
-      FlashcardModel.aggregate([
-        { $match: { userId } },
-        {
-          $group: {
-            _id: null,
-            totalReviews: { $sum: '$reviewCount' },
-            avgReviews: { $avg: '$reviewCount' },
-            maxReviews: { $max: '$reviewCount' }
-          }
-        }
-      ])
-    ]);
-
-    return {
-      total,
-      active,
-      readyForReview,
-      byDifficulty: byDifficulty.reduce((acc, item) => {
-        acc[item._id] = item.count;
-        return acc;
-      }, {} as Record<string, number>),
-      byCategory: byCategory.reduce((acc, item) => {
-        acc[item._id] = item.count;
-        return acc;
-      }, {} as Record<string, number>),
-      reviewStats: reviewStats[0] || { totalReviews: 0, avgReviews: 0, maxReviews: 0 }
-    };
-  }
-
-  // Relatório de materiais de estudo
-  static async getStudyMaterialReport(userId: string) {
-    const [total, publicCount, totalSize, byCategory, byMimeType, downloadStats] = await Promise.all([
-      StudyMaterialModel.countDocuments({ userId }),
-      StudyMaterialModel.countDocuments({ userId, isPublic: true }),
-      StudyMaterialModel.aggregate([
-        { $match: { userId } },
-        { $group: { _id: null, totalSize: { $sum: '$fileSize' } } }
-      ]),
-      StudyMaterialModel.aggregate([
-        { $match: { userId } },
-        { $group: { _id: '$category', count: { $sum: 1 } } }
-      ]),
-      StudyMaterialModel.aggregate([
-        { $match: { userId } },
-        { $group: { _id: '$mimeType', count: { $sum: 1 } } }
-      ]),
-      StudyMaterialModel.aggregate([
-        { $match: { userId } },
-        {
-          $group: {
-            _id: null,
-            totalDownloads: { $sum: '$downloadCount' },
-            avgDownloads: { $avg: '$downloadCount' },
-            maxDownloads: { $max: '$downloadCount' }
-          }
-        }
-      ])
-    ]);
-
-    return {
-      total,
-      publicCount,
-      totalSizeMB: Math.round((totalSize[0]?.totalSize || 0) / (1024 * 1024) * 100) / 100,
-      byCategory: byCategory.reduce((acc, item) => {
-        acc[item._id] = item.count;
-        return acc;
-      }, {} as Record<string, number>),
-      byMimeType: byMimeType.reduce((acc, item) => {
-        acc[item._id] = item.count;
-        return acc;
-      }, {} as Record<string, number>),
-      downloadStats: downloadStats[0] || { totalDownloads: 0, avgDownloads: 0, maxDownloads: 0 }
-    };
-  }
-
-  // Relatório de notificações
-  static async getNotificationReport(userId: string) {
-    const [total, unread, byType, recentActivity] = await Promise.all([
-      NotificationModel.countDocuments({ userId }),
-      NotificationModel.countDocuments({ userId, isRead: false }),
-      NotificationModel.aggregate([
-        { $match: { userId } },
-        { $group: { _id: '$type', count: { $sum: 1 } } }
-      ]),
-      NotificationModel.find({ userId })
-        .sort({ createdAt: -1 })
-        .limit(10)
-        .lean()
-    ]);
-
-    return {
-      total,
-      unread,
-      byType: byType.reduce((acc, item) => {
-        acc[item._id] = item.count;
-        return acc;
-      }, {} as Record<string, number>),
-      recentActivity
-    };
-  }
-
-  // Relatório comparativo (semana atual vs semana anterior)
-  static async getComparativeReport(userId: string) {
+  // Relatório de performance por matéria
+  static async getSubjectPerformanceReport(userId: string, period: 'week' | 'month' | 'year' = 'month') {
     const now = new Date();
-    const currentWeekStart = startOfWeek(now, { weekStartsOn: 1 });
-    const currentWeekEnd = endOfWeek(now, { weekStartsOn: 1 });
-    const lastWeekStart = subWeeks(currentWeekStart, 1);
-    const lastWeekEnd = subWeeks(currentWeekEnd, 1);
+    let startDate: Date;
+    let endDate: Date;
 
-    const [currentWeek, lastWeek] = await Promise.all([
-      this.getUserReport(userId, 'week'),
-      this.getUserReportForPeriod(userId, lastWeekStart, lastWeekEnd)
-    ]);
+    switch (period) {
+      case 'week':
+        startDate = startOfWeek(now, { weekStartsOn: 1 });
+        endDate = endOfWeek(now, { weekStartsOn: 1 });
+        break;
+      case 'month':
+        startDate = startOfMonth(now);
+        endDate = endOfMonth(now);
+        break;
+      case 'year':
+        startDate = new Date(now.getFullYear(), 0, 1);
+        endDate = new Date(now.getFullYear(), 11, 31, 23, 59, 59);
+        break;
+      default:
+        startDate = startOfMonth(now);
+        endDate = endOfMonth(now);
+    }
 
-    return {
-      currentWeek,
-      lastWeek,
-      comparison: {
-        studyTimeChange: this.calculatePercentageChange(
-          currentWeek.study.totalTimeHours,
-          lastWeek.study.totalTimeHours
-        ),
-        taskCompletionChange: this.calculatePercentageChange(
-          currentWeek.tasks.completionRate,
-          lastWeek.tasks.completionRate
-        ),
-        sessionsChange: this.calculatePercentageChange(
-          currentWeek.study.sessions,
-          lastWeek.study.sessions
-        )
-      }
-    };
-  }
-
-  // Método auxiliar para calcular mudança percentual
-  private static calculatePercentageChange(current: number, previous: number): number {
-    if (previous === 0) return current > 0 ? 100 : 0;
-    return Math.round(((current - previous) / previous) * 100);
-  }
-
-  // Método auxiliar para relatório de período específico
-  private static async getUserReportForPeriod(userId: string, startDate: Date, endDate: Date) {
-    const [
-      tasksCreated,
-      tasksCompleted,
-      studySessions,
-      totalStudyTime
-    ] = await Promise.all([
-      TaskModel.countDocuments({ userId, createdAt: { $gte: startDate, $lte: endDate } }),
-      TaskModel.countDocuments({ userId, completed: true, updatedAt: { $gte: startDate, $lte: endDate } }),
-      StudySessionModel.countDocuments({ userId, endTime: { $gte: startDate, $lte: endDate } }),
-      StudySessionModel.aggregate([
-        { $match: { userId, endTime: { $gte: startDate, $lte: endDate } } },
-        { $group: { _id: null, totalTime: { $sum: '$duration' } } }
-      ])
-    ]);
-
-    const totalStudyTimeHours = totalStudyTime[0]?.totalTime ? totalStudyTime[0].totalTime / 3600 : 0;
-
-    return {
-      tasks: {
-        created: tasksCreated,
-        completed: tasksCompleted,
-        completionRate: tasksCreated > 0 ? (tasksCompleted / tasksCreated) * 100 : 0
+    // Get study sessions by subject
+    const studySessions = await prisma.studySession.findMany({
+      where: {
+        userId,
+        endTime: { gte: startDate, lte: endDate }
       },
-      study: {
-        sessions: studySessions,
-        totalTimeHours: Math.round(totalStudyTimeHours * 100) / 100,
-        averageSessionTime: studySessions > 0 ? Math.round((totalStudyTimeHours / studySessions) * 100) / 100 : 0
+      select: {
+        subject: true,
+        duration: true
+      }
+    });
+
+    // Get flashcards by category
+    const flashcards = await prisma.flashcard.findMany({
+      where: {
+        userId,
+        lastReviewed: { gte: startDate, lte: endDate }
+      },
+      select: {
+        category: true
+      }
+    });
+
+    // Group by subject/category
+    const subjectStats: { [key: string]: { studyTime: number; flashcardsReviewed: number } } = {};
+
+    studySessions.forEach(session => {
+      const subject = session.subject || 'Outros';
+      if (!subjectStats[subject]) {
+        subjectStats[subject] = { studyTime: 0, flashcardsReviewed: 0 };
+      }
+      subjectStats[subject].studyTime += session.duration || 0;
+    });
+
+    flashcards.forEach(flashcard => {
+      const category = flashcard.category || 'Outros';
+      if (!subjectStats[category]) {
+        subjectStats[category] = { studyTime: 0, flashcardsReviewed: 0 };
+      }
+      subjectStats[category].flashcardsReviewed += 1;
+    });
+
+    return {
+      period,
+      startDate,
+      endDate,
+      subjects: Object.entries(subjectStats).map(([subject, stats]) => ({
+        subject,
+        studyTimeMinutes: stats.studyTime,
+        studyTimeHours: Math.round((stats.studyTime / 60) * 100) / 100,
+        flashcardsReviewed: stats.flashcardsReviewed
+      }))
+    };
+  }
+
+  // Relatório de produtividade
+  static async getProductivityReport(userId: string, days: number = 7) {
+    const endDate = new Date();
+    const startDate = subDays(endDate, days);
+
+    const [tasks, studySessions, flashcards] = await Promise.all([
+      prisma.task.findMany({
+        where: {
+          userId,
+          createdAt: { gte: startDate, lte: endDate }
+        },
+        select: {
+          completed: true,
+          completedOnTime: true,
+          createdAt: true,
+          updatedAt: true
+        }
+      }),
+      prisma.studySession.findMany({
+        where: {
+          userId,
+          endTime: { gte: startDate, lte: endDate }
+        },
+        select: {
+          duration: true,
+          endTime: true
+        }
+      }),
+      prisma.flashcard.findMany({
+        where: {
+          userId,
+          lastReviewed: { gte: startDate, lte: endDate }
+        },
+        select: {
+          lastReviewed: true
+        }
+      })
+    ]);
+
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter(t => t.completed).length;
+    const onTimeTasks = tasks.filter(t => t.completed && t.completedOnTime).length;
+    const totalStudyTime = studySessions.reduce((sum, session) => sum + (session.duration || 0), 0);
+    const totalFlashcards = flashcards.length;
+
+    return {
+      period: `${days} days`,
+      startDate,
+      endDate,
+      productivity: {
+        taskCompletionRate: totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0,
+        onTimeCompletionRate: completedTasks > 0 ? (onTimeTasks / completedTasks) * 100 : 0,
+        averageStudyTimePerDay: Math.round((totalStudyTime / days) * 100) / 100,
+        flashcardsPerDay: Math.round((totalFlashcards / days) * 100) / 100
+      },
+      totals: {
+        tasksCreated: totalTasks,
+        tasksCompleted: completedTasks,
+        tasksOnTime: onTimeTasks,
+        studyTimeMinutes: totalStudyTime,
+        studyTimeHours: Math.round((totalStudyTime / 60) * 100) / 100,
+        flashcardsReviewed: totalFlashcards
       }
     };
   }
-} 
+}

@@ -10,7 +10,6 @@ import {
 
 const router = Router();
 
-// Validation middleware
 const registerValidation = [
   body('email')
     .isEmail()
