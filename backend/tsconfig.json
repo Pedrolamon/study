@@ -25,7 +25,10 @@
     "noUncheckedIndexedAccess": true,
     "allowUnusedLabels": false,
     "allowUnreachableCode": false
-  },
+  },"typeRoots": [
+      "./node_modules/@types",
+      "./src/types"
+    ],
   "include": [
     "src/**/*"
   ],

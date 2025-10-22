@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions, Secret } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { UserModel } from '../models';
 import type { AuthResponse } from '../types';
@@ -11,7 +11,7 @@ const generateToken = (userId: string): string => {
   return jwt.sign(
     { userId },
     secret,
-    { expiresIn: expiresIn as string }
+    { expiresIn: expiresIn as string } as any
   );
 };
 
