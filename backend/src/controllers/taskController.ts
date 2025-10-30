@@ -1,25 +1,51 @@
 import { Request, Response } from 'express';
-import { TaskModel } from '../models';
-import type { Task, PaginationParams, PaginatedResponse } from '../types';
+import prisma from '../lib/prisma';
+import { Task } from '@prisma/client';
 import { GamificationService } from '../services/gamificationService';
 
 interface AuthRequest extends Request {
   user?: any;
 }
 
+interface PaginationParams {
+  page?: string;
+  limit?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  completed?: string;
+  priority?: string;
+  dueDate?: string;
+}
+
+interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
 export const createTask = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User not authenticated' });
+      return;
+    }
     const { title, description, priority, dueDate } = req.body;
 
-    const task = await TaskModel.create({
+    const task = await prisma.task.create({
+      data:{
       userId,
       title,
       description,
       priority: priority || 'MEDIUM',
-      dueDate,
+      dueDate: dueDate ? new Date(dueDate) : null,
       completed: false
-    });
+      }as any
+    }); 
 
     res.status(201).json({
       success: true,
@@ -29,7 +55,7 @@ export const createTask = async (req: AuthRequest, res: Response): Promise<void>
   } catch (error: any) {
     console.error('Create task error:', error);
     
-    if (error.code === 'P2002') {
+    if (error.code === 'P2002' && error.meta?.target.includes('title')) {
       res.status(400).json({
         success: false,
         error: 'Task with this title already exists'
@@ -47,6 +73,11 @@ export const createTask = async (req: AuthRequest, res: Response): Promise<void>
 export const getTasks = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user._id;
+
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User not authenticated' });
+      return;
+    }
     const { 
       page = 1, 
       limit = 20, 
@@ -55,7 +86,11 @@ export const getTasks = async (req: AuthRequest, res: Response): Promise<void> =
       completed,
       priority,
       dueDate
-    } = req.query;
+    } = req.query as PaginationParams;
+
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+    const skip = (pageNum - 1) * limitNum;
 
     const filter: any = { userId };
 
@@ -64,31 +99,39 @@ export const getTasks = async (req: AuthRequest, res: Response): Promise<void> =
       filter.completed = completed === 'true';
     }
     if (priority) {
-      filter.priority = priority;
+      filter.priority = priority.toUpperCase();
     }
     if (dueDate) {
-      filter.dueDate = dueDate;
+      const startOfDay = new Date(dueDate);
+      startOfDay.setUTCHours(0, 0, 0, 0); 
+      const endOfDay = new Date(dueDate);
+      endOfDay.setUTCHours(23, 59, 59, 999);
+      
+      filter.dueDate = {
+        gte: startOfDay,
+        lte: endOfDay,
+      };
     }
 
-    const skip = (Number(page) - 1) * Number(limit);
-    const sort: any = { [sortBy as string]: sortOrder === 'desc' ? 'desc' : 'asc' };
+    const orderBy: any = { [sortBy as string]: sortOrder as 'asc' | 'desc' };
 
-    const tasks = await TaskModel.findByUserId(userId, {
-      where: filter,
-      orderBy: sort,
-      skip,
-      take: Number(limit)
-    });
-
-    const total = await TaskModel.findByUserId(userId, { where: filter }).then(tasks => tasks.length);
+    const [tasks, total] = await prisma.$transaction([
+      prisma.task.findMany({
+        where: filter,
+        orderBy,
+        skip,
+        take: limitNum,
+      }),
+      prisma.task.count({ where: filter }), // total usa o mesmo filtro
+    ]);
 
     const totalPages = Math.ceil(total / Number(limit));
 
     const response: PaginatedResponse<Task> = {
       data: tasks,
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
         totalPages
       }
@@ -111,9 +154,18 @@ export const getTaskById = async (req: AuthRequest, res: Response): Promise<void
   try {
     const userId = req.user._id;
     const { id } = req.params;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User not authenticated' });
+      return;
+    }
 
-    const task = await TaskModel.findOne({ _id: id, userId });
-    
+    const task = await prisma.task.findUnique({ 
+      where: { 
+        id, 
+        userId,
+      } as any // Pode precisar de 'as any' se o 'id' não for o único @id
+    });
+
     if (!task) {
       res.status(404).json({
         success: false,
@@ -137,54 +189,68 @@ export const getTaskById = async (req: AuthRequest, res: Response): Promise<void
 
 export const updateTask = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user._id;
+    const userId = req.user?.id;
     const { id } = req.params;
     const updates = req.body;
 
-    const task = await TaskModel.findOne({ _id: id, userId });
-    
-    if (!task) {
-      res.status(404).json({
-        success: false,
-        error: 'Task not found'
-      });
-      return;
-    }
-
-    // Update fields
-    Object.assign(task, updates);
-    await task.save();
+    const updatedTask = await prisma.task.update({
+      where: {
+        id,
+        userId, 
+      } as any,
+      data: {
+        ...updates,
+        dueDate: updates.dueDate ? new Date(updates.dueDate) : updates.dueDate,
+        priority: updates.priority ? updates.priority.toUpperCase() : updates.priority,
+      },
+    });
 
     res.status(200).json({
       success: true,
-      data: task,
-      message: 'Task updated successfully'
+      data: updatedTask,
+      message: 'Task updated successfully',
     });
   } catch (error: any) {
     console.error('Update task error:', error);
+
+    if (error.code === 'P2025') {
+      res.status(404).json({
+        success: false,
+        error: 'Task not found or does not belong to user',
+      });
+      return;
+    }
     
-    if (error.name === 'ValidationError') {
-      const errors = Object.values(error.errors).map((err: any) => err.message);
+    if (error.code === 'P2000' || error.code === 'P2005') {
       res.status(400).json({
         success: false,
-        error: errors.join(', ')
+        error: 'Invalid data format provided for update',
       });
       return;
     }
 
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Internal server error',
     });
   }
 };
 
 export const deleteTask = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user._id;
+    const userId = req.user?.id;
     const { id } = req.params;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User not authenticated' });
+      return;
+    }
 
-    const task = await TaskModel.findOneAndDelete({ _id: id, userId });
+    const task = await prisma.task.delete({
+      where: { 
+        id, 
+        userId,
+      } as any 
+    });
     
     if (!task) {
       res.status(404).json({
@@ -212,7 +278,12 @@ export const toggleTaskCompletion = async (req: AuthRequest, res: Response): Pro
     const userId = req.user._id;
     const { id } = req.params;
 
-    const task = await TaskModel.findOne({ _id: id, userId });
+    const task = await prisma.task.findUnique({ 
+      where: { 
+        id, 
+        userId,
+      } as any
+    });
     
     if (!task) {
       res.status(404).json({
@@ -221,34 +292,41 @@ export const toggleTaskCompletion = async (req: AuthRequest, res: Response): Pro
       });
       return;
     }
-
     const wasCompleted = task.completed;
-    task.completed = !task.completed;
+    const newCompletedStatus = !task.completed;
     
-    // Check if task is being completed and if it's on time
-    if (task.completed && !wasCompleted) {
-      const now = new Date();
-      const dueDate = new Date(task.dueDate);
-      task.completedOnTime = now <= dueDate;
+    const now = new Date();
+    let completedOnTime = task.completedOnTime;
+
+    if (newCompletedStatus && !wasCompleted) {
+      const dueDate = task.dueDate;
+      completedOnTime = dueDate ? (now <= dueDate) : true; 
+    } else if (!newCompletedStatus && wasCompleted) {
+      completedOnTime = null; 
     }
     
-    await task.save();
+    const updatedTask = await prisma.task.update({
+      where: { id: task.id },
+      data: {
+        completed: newCompletedStatus,
+        completedOnTime: completedOnTime,
+      }
+    });
 
-    // Award points for task completion
-    if (task.completed && !wasCompleted) {
-      await GamificationService.awardTaskPoints(userId, task);
+    if (updatedTask.completed && !wasCompleted) {
+      await GamificationService.awardTaskPoints(userId, updatedTask);
     }
 
     res.status(200).json({
       success: true,
-      data: task,
-      message: `Task ${task.completed ? 'completed' : 'uncompleted'} successfully`
+      data: updatedTask,
+      message: `Task ${updatedTask.completed ? 'completed' : 'uncompleted'} successfully`,
     });
   } catch (error: any) {
     console.error('Toggle task completion error:', error);
     res.status(500).json({
       success: false,
-      error: 'Internal server error'
+      error: 'Internal server error',
     });
   }
 };
@@ -256,15 +334,26 @@ export const toggleTaskCompletion = async (req: AuthRequest, res: Response): Pro
 export const getTaskStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const userId = req.user._id;
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User not authenticated' });
+      return;
+    }
 
-    const [total, completed, overdue] = await Promise.all([
-      TaskModel.countDocuments({ userId }),
-      TaskModel.countDocuments({ userId, completed: true }),
-      TaskModel.countDocuments({
-        userId,
-        completed: false,
-        dueDate: { $lt: new Date().toISOString().split('T')[0] }
-      })
+    const now = new Date();
+    now.setUTCHours(0, 0, 0, 0);
+
+    const [total, completed, overdue] = await prisma.$transaction([
+      prisma.task.count({ where: { userId } }),
+      prisma.task.count({ where: { userId, completed: true } }),
+      prisma.task.count({
+        where: {
+          userId,
+          completed: false,
+          dueDate: {
+            lt: now, 
+          },
+        },
+      }),
     ]);
 
     const pending = total - completed;

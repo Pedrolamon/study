@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+/*import { Request, Response } from 'express';
 import { StudyMaterialModel } from '../models/StudyMaterial';
 import { ApiResponse, PaginatedResponse } from '../types';
 import { GamificationService } from '../services/gamificationService';
@@ -326,4 +326,4 @@ export const getStudyMaterialStats = async (req: Request, res: Response<ApiRespo
       message: 'Erro interno do servidor'
     });
   }
-}; 
+}; */

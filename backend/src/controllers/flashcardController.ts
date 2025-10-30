@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+/*import { Request, Response } from 'express';
 import { FlashcardModel } from '../models/Flashcard';
 import { ApiResponse, PaginatedResponse, FlashcardQuery, Flashcard} from '../types';
 import { GamificationService } from '../services/gamificationService';
@@ -310,4 +310,4 @@ export const getFlashcardStats = async (req: Request, res: Response<ApiResponse>
       message: 'Erro interno do servidor'
     });
   }
-}; 
+}; */

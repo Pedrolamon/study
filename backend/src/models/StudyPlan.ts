@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose';
+/*import mongoose, { Document, Schema } from 'mongoose';
 
 export interface EditalTopic {
   _id?: string;
@@ -304,4 +304,4 @@ performanceMetricsSchema.index({ topicId: 1 });
 
 export const EditalModel = mongoose.model<EditalDocument>('Edital', editalSchema);
 export const StudyPlanModel = mongoose.model<StudyPlanDocument>('StudyPlan', studyPlanSchema);
-export const PerformanceMetricsModel = mongoose.model<PerformanceMetricsDocument>('PerformanceMetrics', performanceMetricsSchema);
+export const PerformanceMetricsModel = mongoose.model<PerformanceMetricsDocument>('PerformanceMetrics', performanceMetricsSchema);*/

@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+/*import { Request, Response } from 'express';
 import { SimulatedExamModel } from '../models';
 
 interface AuthRequest extends Request {
@@ -216,4 +216,4 @@ export const getExamsBySubject = async (req: AuthRequest, res: Response) => {
     console.error('Erro ao buscar simulados por disciplina:', error);
     res.status(500).json({ message: 'Erro interno do servidor' });
   }
-};
+};*/

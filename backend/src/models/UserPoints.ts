@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose';
+/*import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IUserPoints extends Document {
   userId: mongoose.Types.ObjectId;
@@ -197,4 +197,4 @@ userPointsSchema.statics.getOrCreateUserPoints = async function(userId: string) 
   return userPoints;
 };
 
-export default mongoose.model<IUserPoints>('UserPoints', userPointsSchema); 
+export default mongoose.model<IUserPoints>('UserPoints', userPointsSchema); */

@@ -1,9 +1,14 @@
-import { Request, Response } from 'express';
+/*import { Request, Response } from 'express';
 import { FlashcardModel, SpacedRepetitionModel } from '../models';
+import { PrismaClient } from '@prisma/client';
+
+
 
 interface AuthRequest extends Request {
   user?: any;
 }
+
+const prisma = new PrismaClient();
 
 // SM-2 Spaced Repetition Algorithm Implementation
 class SpacedRepetitionAlgorithm {
@@ -279,4 +284,4 @@ export const getReviewStats = async (req: AuthRequest, res: Response) => {
     console.error('Erro ao buscar estatísticas de revisão:', error);
     res.status(500).json({ message: 'Erro interno do servidor' });
   }
-};
+};*/

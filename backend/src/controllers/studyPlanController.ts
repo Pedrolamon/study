@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+/*import { Request, Response } from 'express';
 import { prisma } from '../models';
 
 interface AuthRequest extends Request {
@@ -375,4 +375,4 @@ export const getUpcomingSessions = async (req: AuthRequest, res: Response) => {
     console.error('Erro ao buscar próximas sessões:', error);
     res.status(500).json({ message: 'Erro interno do servidor' });
   }
-};
+};*/

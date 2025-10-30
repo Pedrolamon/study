@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose';
+/*import mongoose, { Document, Schema } from 'mongoose';
 
 export interface Question {
   _id?: string;
@@ -187,4 +187,4 @@ examResultSchema.index({ userId: 1, completedAt: -1 });
 
 export const SimulatedExamModel = mongoose.model<SimulatedExamDocument>('SimulatedExam', simulatedExamSchema);
 export const QuestionModel = mongoose.model<QuestionDocument>('Question', questionSchema);
-export const ExamResultModel = mongoose.model<ExamResultDocument>('ExamResult', examResultSchema);
+export const ExamResultModel = mongoose.model<ExamResultDocument>('ExamResult', examResultSchema);*/

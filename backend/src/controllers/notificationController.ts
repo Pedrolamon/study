@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+/*import { Request, Response } from 'express';
 import { NotificationService } from '../services/notificationService';
 import { ApiResponse } from '../types';
 
@@ -144,4 +144,4 @@ export const createScheduledNotification = async (req: Request, res: Response<Ap
       message: 'Erro interno do servidor'
     });
   }
-}; 
+}; */

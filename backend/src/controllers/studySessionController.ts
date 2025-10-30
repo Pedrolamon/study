@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+/*import { Request, Response } from 'express';
 import { StudySessionModel } from '../models/StudySession';
 import type { StudySession, PaginationParams, PaginatedResponse } from '../types';
 import { GamificationService } from '../services/gamificationService';
@@ -330,4 +330,4 @@ export const getStudyStats = async (req: AuthRequest, res: Response): Promise<vo
       error: 'Internal server error'
     });
   }
-}; 
+}; */

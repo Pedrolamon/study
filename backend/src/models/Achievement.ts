@@ -1,4 +1,4 @@
-import mongoose, { Document, Schema } from 'mongoose';
+/*import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IAchievement extends Document {
   userId: mongoose.Types.ObjectId;
@@ -55,27 +55,27 @@ achievementSchema.virtual('user', {
 });
 
 // Method to get achievement with populated badge
-achievementSchema.methods.withBadge = function() {
-  return this.populate('badge');
+achievementSchema.methods['withBadge'] = function() {
+  return this['populate']('badge');
 };
 
 // Method to get achievement with populated user
-achievementSchema.methods.withUser = function() {
-  return this.populate('user', 'username email');
+achievementSchema.methods['withUser'] = function() {
+  return this['populate']('user', 'username email');
 };
 
 // Static method to get user achievements
-achievementSchema.statics.getUserAchievements = function(userId: string) {
+achievementSchema.statics['getUserAchievements'] = function(userId: string) {
   return this.find({ userId }).populate('badge').sort({ unlockedAt: -1 });
 };
 
 // Static method to get recent achievements
-achievementSchema.statics.getRecentAchievements = function(limit: number = 10) {
+achievementSchema.statics['getRecentAchievements'] = function(limit: number = 10) {
   return this.find().populate('badge').populate('user', 'username').sort({ unlockedAt: -1 }).limit(limit);
 };
 
 // Static method to check if user has achievement
-achievementSchema.statics.hasAchievement = function(userId: string, badgeId: string) {
+achievementSchema.statics['hasAchievement'] = function(userId: string, badgeId: string) {
   return this.exists({ userId, badgeId });
 };
 
@@ -92,4 +92,4 @@ achievementSchema.statics.getUserTotalPoints = function(userId: string) {
   ]);
 };
 
-export default mongoose.model<IAchievement>('Achievement', achievementSchema); 
+export default mongoose.model<IAchievement>('Achievement', achievementSchema); */

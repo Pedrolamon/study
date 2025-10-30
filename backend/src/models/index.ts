@@ -152,7 +152,7 @@ export const TaskModel = {
   },
   
   async findOverdue(userId: string) {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toISOString();
     return await prisma.task.findMany({
       where: {
         userId,
@@ -332,7 +332,7 @@ export const UserPointsModel = {
     }
     
     const newTotalPoints = userPoints.totalPoints + points;
-    const newExperience = userPoints.experience + points;
+    let newExperience = userPoints.experience + points;
     
     // Calcular novo nível
     let newLevel = userPoints.level;

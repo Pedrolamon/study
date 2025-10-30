@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+/*import { Request, Response } from 'express';
 import { ReportService } from '../services/reportService';
 import { ApiResponse } from '../types';
 
@@ -162,4 +162,4 @@ export const getDashboardData = async (req: Request, res: Response<ApiResponse>)
       message: 'Erro interno do servidor'
     });
   }
-}; 
+}; */
