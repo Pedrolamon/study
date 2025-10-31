@@ -1,9 +1,21 @@
-/*import { Request, Response } from 'express';
-import { StudyMaterialModel } from '../models/StudyMaterial';
+import { Request, Response } from 'express';
+import { PrismaClient } from '@prisma/client';
 import { ApiResponse, PaginatedResponse } from '../types';
 import { GamificationService } from '../services/gamificationService';
 import fs from 'fs/promises';
 import path from 'path';
+
+const prisma = new PrismaClient();
+
+type StudyMaterial = Awaited<ReturnType<typeof prisma.studyMaterial.create>>;
+
+interface StudyMaterialsQuery {
+  page?: string; // Query parameters are always strings or arrays of strings
+  limit?: string;
+  category?: string;
+  isPublic?: string;
+  search?: string;
+}
 
 export const uploadStudyMaterial = async (req: Request, res: Response<ApiResponse>) => {
   try {
@@ -52,7 +64,8 @@ export const uploadStudyMaterial = async (req: Request, res: Response<ApiRespons
       });
     }
 
-    const studyMaterial = new StudyMaterialModel({
+    const studyMaterial = await prisma.studyMaterial.create({
+      data: {
       userId,
       title,
       description: description || '',
@@ -64,12 +77,10 @@ export const uploadStudyMaterial = async (req: Request, res: Response<ApiRespons
       category,
       tags: tags ? JSON.parse(tags) : [],
       isPublic: isPublic === 'true'
-    });
-
-    await studyMaterial.save();
+  }});
 
     // Award points for material upload
-    await GamificationService.awardMaterialPoints(userId, studyMaterial);
+    await GamificationService.awardMaterialPoints(studyMaterial as any);
 
     res.status(201).json({
       success: true,
@@ -85,38 +96,39 @@ export const uploadStudyMaterial = async (req: Request, res: Response<ApiRespons
   }
 };
 
-export const getStudyMaterials = async (req: Request, res: Response<ApiResponse>) => {
+export const getStudyMaterials = async (req: Request<{}, {}, {}, StudyMaterialsQuery>, res: Response<ApiResponse>) => {
   try {
-    const userId = req.user!.id;
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const category = req.query.category as string;
-    const isPublic = req.query.isPublic !== undefined ? req.query.isPublic === 'true' : undefined;
-    const search = req.query.search as string;
+      const userId = req.user!.id;
+      const { page: pageQuery, limit: limitQuery, category, isPublic: isPublicQuery, search } = req.query;
+      const page = parseInt(pageQuery || '') || 1;
+      const limit = parseInt(limitQuery || '') || 20;
+      const isPublic = isPublicQuery !== undefined ? isPublicQuery === 'true' : undefined;
 
     const skip = (page - 1) * limit;
-    const query: any = { userId };
+    const where: any = { userId };
 
-    if (category) query.category = category;
-    if (isPublic !== undefined) query.isPublic = isPublic;
+    if (category) where.category = category;
+    if (isPublic !== undefined) where.isPublic = isPublic;
     if (search) {
-      query.$or = [
-        { title: { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
-        { tags: { $in: [new RegExp(search, 'i')] } }
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
       ];
     }
 
     const [materials, total] = await Promise.all([
-      StudyMaterialModel.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      StudyMaterialModel.countDocuments(query)
+      prisma.studyMaterial.findMany({
+        where: where,
+        orderBy: {
+          createdAt: 'desc',
+        },
+        skip: skip,
+        take: limit,
+      }),
+      prisma.studyMaterial.count({ where }),
     ]);
 
-    const result: PaginatedResponse = {
+    const result: PaginatedResponse<StudyMaterial> = {
       data: materials,
       pagination: {
         page,
@@ -145,7 +157,19 @@ export const getStudyMaterialById = async (req: Request, res: Response<ApiRespon
     const userId = req.user!.id;
     const { materialId } = req.params;
 
-    const material = await StudyMaterialModel.findOne({ _id: materialId, userId });
+    if (!materialId) {
+      return res.status(400).json({
+          success: false,
+          message: 'ID do material é obrigatório'
+      });
+  }
+
+    const material = await prisma.studyMaterial.findFirst({
+      where: {
+        id: materialId, // Assumindo que o campo ID é 'id'
+        userId,
+      },
+    });
 
     if (!material) {
       return res.status(404).json({
@@ -174,22 +198,36 @@ export const updateStudyMaterial = async (req: Request, res: Response<ApiRespons
     const { materialId } = req.params;
     const { title, description, category, tags, isPublic } = req.body;
 
-    const material = await StudyMaterialModel.findOne({ _id: materialId, userId });
+    if (!materialId) {
+      return res.status(400).json({
+          success: false,
+          message: 'ID do material é obrigatório'
+      });
+  }
+    const materialCheck = await prisma.studyMaterial.findFirst({
+      where: { id: materialId, userId },
+      select: { id: true }
+    });
 
-    if (!material) {
+    if (!materialCheck) {
       return res.status(404).json({
         success: false,
         message: 'Material de estudo não encontrado'
       });
     }
 
-    if (title !== undefined) material.title = title;
-    if (description !== undefined) material.description = description;
-    if (category !== undefined) material.category = category;
-    if (tags !== undefined) material.tags = JSON.parse(tags);
-    if (isPublic !== undefined) material.isPublic = isPublic;
-
-    await material.save();
+    const material = await prisma.studyMaterial.update({
+      where: {
+        id: materialId,
+      },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(description !== undefined && { description }),
+        ...(category !== undefined && { category }),
+        ...(tags !== undefined && { tags: JSON.parse(tags) }), // Depende do tipo de tags
+        ...(isPublic !== undefined && { isPublic }),
+      },
+    });
 
     res.json({
       success: true,
@@ -210,7 +248,16 @@ export const deleteStudyMaterial = async (req: Request, res: Response<ApiRespons
     const userId = req.user!.id;
     const { materialId } = req.params;
 
-    const material = await StudyMaterialModel.findOne({ _id: materialId, userId });
+    if (!materialId) {
+      return res.status(400).json({
+          success: false,
+          message: 'ID do material é obrigatório'
+      });
+  }
+
+    const material = await prisma.studyMaterial.findFirst({
+      where: { id: materialId, userId },
+    });
 
     if (!material) {
       return res.status(404).json({
@@ -226,7 +273,11 @@ export const deleteStudyMaterial = async (req: Request, res: Response<ApiRespons
       console.error('Erro ao deletar arquivo físico:', fileError);
     }
 
-    await StudyMaterialModel.findByIdAndDelete(materialId);
+    await prisma.studyMaterial.delete({
+      where: {
+        id: materialId, // Deleta pelo ID
+      },
+    });
 
     res.json({
       success: true,
@@ -246,7 +297,15 @@ export const downloadStudyMaterial = async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const { materialId } = req.params;
 
-    const material = await StudyMaterialModel.findOne({ _id: materialId, userId });
+    if (!materialId) {
+      return res.status(400).json({
+          success: false,
+          message: 'ID do material é obrigatório'
+      });
+  }
+    const material = await prisma.studyMaterial.findFirst({
+      where: { id: materialId, userId },
+    });
 
     if (!material) {
       return res.status(404).json({
@@ -266,7 +325,14 @@ export const downloadStudyMaterial = async (req: Request, res: Response) => {
     }
 
     // Incrementar contador de downloads
-    await material.incrementDownloadCount();
+    await prisma.studyMaterial.update({
+      where: { id: materialId },
+      data: {
+        downloadCount: {
+          increment: 1,
+        },
+      },
+    });
 
     // Enviar arquivo
     res.download(material.filePath, material.originalName);
@@ -283,35 +349,48 @@ export const getStudyMaterialStats = async (req: Request, res: Response<ApiRespo
   try {
     const userId = req.user!.id;
 
-    const [total, publicCount, totalSize, byCategory, byMimeType] = await Promise.all([
-      StudyMaterialModel.countDocuments({ userId }),
-      StudyMaterialModel.countDocuments({ userId, isPublic: true }),
-      StudyMaterialModel.aggregate([
-        { $match: { userId: userId } },
-        { $group: { _id: null, totalSize: { $sum: '$fileSize' } } }
-      ]),
-      StudyMaterialModel.aggregate([
-        { $match: { userId: userId } },
-        { $group: { _id: '$category', count: { $sum: 1 } } }
-      ]),
-      StudyMaterialModel.aggregate([
-        { $match: { userId: userId } },
-        { $group: { _id: '$mimeType', count: { $sum: 1 } } }
-      ])
+    // 💡 Contagens e Soma com prisma.aggregate()
+    const [total, publicCount, totalSizeResult, byCategory, byMimeType] = await Promise.all([
+      prisma.studyMaterial.count({ where: { userId } }),
+      prisma.studyMaterial.count({ where: { userId, isPublic: true } }),
+      prisma.studyMaterial.aggregate({
+        _sum: {
+          fileSize: true,
+        },
+        where: { userId },
+      }),
+      prisma.studyMaterial.groupBy({
+        by: ['category'],
+        _count: {
+          category: true,
+        },
+        where: { userId },
+      }),
+      prisma.studyMaterial.groupBy({
+        by: ['mimeType'],
+        _count: {
+          mimeType: true,
+        },
+        where: { userId },
+      }),
     ]);
+  
+    const byCategoryFormatted = byCategory.reduce((acc, item) => {
+      acc[item.category] = item._count.category;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const byMimeTypeFormatted = byMimeType.reduce((acc, item) => {
+      acc[item.mimeType] = item._count.mimeType;
+      return acc;
+    }, {} as Record<string, number>);
 
     const stats = {
       total,
       publicCount,
-      totalSize: totalSize[0]?.totalSize || 0,
-      byCategory: byCategory.reduce((acc, item) => {
-        acc[item._id] = item.count;
-        return acc;
-      }, {} as Record<string, number>),
-      byMimeType: byMimeType.reduce((acc, item) => {
-        acc[item._id] = item.count;
-        return acc;
-      }, {} as Record<string, number>)
+      totalSize: totalSizeResult._sum.fileSize || 0,
+      byCategory: byCategoryFormatted,
+      byMimeType: byMimeTypeFormatted,
     };
 
     res.json({
@@ -326,4 +405,4 @@ export const getStudyMaterialStats = async (req: Request, res: Response<ApiRespo
       message: 'Erro interno do servidor'
     });
   }
-}; */
+};
