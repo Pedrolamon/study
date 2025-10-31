@@ -329,6 +329,39 @@ model SpacedRepetition {
   @@map("spaced_repetitions")
 }
 
+model Edital {
+  id           String   @id @default(cuid())
+  title        String
+  userId       String
+  description  String
+  examType     String
+  organization String
+  isActive     Boolean
+  examDate     DateTime
+  topics       Json
+  totalTopics  Int
+
+  StudyPlan StudyPlan[]
+}
+
+model StudyPlan {
+  id          String   @id @default(cuid())
+  editalId    String
+  edital      Edital   @relation(fields: [editalId], references: [id])
+  userId      String
+  isActive    Boolean
+  createdAt   DateTime @default(now())
+  lastUpdated DateTime @updatedAt
+  title       String
+  description String
+  startDate   DateTime
+  endDate     DateTime
+  totalHours  Float
+  dailyHours  Float
+  progress    Int
+  sessions    Json
+}
+
 // Enums
 enum SessionMode {
   POMODORO

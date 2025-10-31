@@ -1,13 +1,21 @@
-/*import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { NotificationService } from '../services/notificationService';
 import { ApiResponse } from '../types';
 
 export const getNotifications = async (req: Request, res: Response<ApiResponse>) => {
+  
   try {
     const userId = req.user!.id;
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const isRead = req.query.isRead !== undefined ? req.query.isRead === 'true' : undefined;
+
+    const {page: pageQuery, limit: limitQuery, isRead: isReadQuery } = req.query as { 
+      page?: string, 
+      limit?: string, 
+      isRead?: string 
+  };
+
+    const page = parseInt(pageQuery as string) || 1;
+    const limit = parseInt(limitQuery as string) || 20;
+    const isRead = isReadQuery !== undefined ? isReadQuery === 'true' : undefined;
 
     const result = await NotificationService.getUserNotifications(userId, page, limit, isRead);
 
@@ -144,4 +152,4 @@ export const createScheduledNotification = async (req: Request, res: Response<Ap
       message: 'Erro interno do servidor'
     });
   }
-}; */
+}; 

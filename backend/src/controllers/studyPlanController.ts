@@ -1,4 +1,4 @@
-/*import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { prisma } from '../models';
 
 interface AuthRequest extends Request {
@@ -169,6 +169,10 @@ export const getEdital = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.id;
 
+    if (!id) {
+      return res.status(400).json({ message: 'ID do Edital é obrigatório' });
+    }
+
     const edital = await prisma.edital.findFirst({
       where: { id, userId }
     });
@@ -259,6 +263,10 @@ export const getStudyPlan = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.id;
 
+    if (!id) {
+      return res.status(400).json({ message: 'ID do Edital é obrigatório' });
+    }
+
     const plan = await prisma.studyPlan.findFirst({
       where: { id, userId },
       include: {
@@ -287,20 +295,36 @@ export const getStudyPlan = async (req: AuthRequest, res: Response) => {
 
 export const updateSessionStatus = async (req: AuthRequest, res: Response) => {
   try {
-    const { planId, sessionId } = req.params;
+    const {id: planId, sessionId } = req.params;
     const userId = req.user?.id;
     const { status, actualDuration, notes, performance } = req.body;
 
+    if (!planId || !userId || !sessionId) {
+       return res.status(400).json({ message: 'IDs do Plano e da Sessão são obrigatórios' });
+      }
+
     const plan = await prisma.studyPlan.findFirst({
-      where: { id: planId, userId }
-    });
+       where: { id: planId, userId },
+         include: {
+           edital: {
+             select: {
+               title: true,
+                 examType: true,
+                  organization: true,
+                  examDate: true,
+                  topics: true
+                 }
+               }
+             }
+         });
 
     if (!plan) {
       return res.status(404).json({ message: 'Plano de estudo não encontrado' });
     }
 
+    const currentSessions = plan.sessions as any[];
     // Update the session in the plan
-    const updatedSessions = plan.sessions.map((session: any) => {
+    const updatedSessions = currentSessions.map((session: any) => {
       if (session.id === sessionId) {
         return {
           ...session,
@@ -316,6 +340,8 @@ export const updateSessionStatus = async (req: AuthRequest, res: Response) => {
     // Calculate progress
     const completedSessions = updatedSessions.filter((s: any) => s.status === 'completed').length;
     const progress = Math.round((completedSessions / updatedSessions.length) * 100);
+
+    
 
     const updatedPlan = await prisma.studyPlan.update({
       where: { id: planId },
@@ -351,7 +377,11 @@ export const getUpcomingSessions = async (req: AuthRequest, res: Response) => {
     const upcomingSessions: any[] = [];
 
     plans.forEach(plan => {
-      plan.sessions.forEach((session: any) => {
+      if (!plan.sessions) {
+        return;
+    }
+    const planSessions = plan.sessions as any[];
+      planSessions.forEach((session: any) => {
         const sessionDate = new Date(session.scheduledDate);
         if (sessionDate >= new Date() &&
             sessionDate <= endDate &&
@@ -370,9 +400,9 @@ export const getUpcomingSessions = async (req: AuthRequest, res: Response) => {
       new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime()
     );
 
-    res.json(upcomingSessions.slice(0, 20)); // Return max 20 sessions
+    res.json(upcomingSessions.slice(0, 20)); 
   } catch (error) {
     console.error('Erro ao buscar próximas sessões:', error);
     res.status(500).json({ message: 'Erro interno do servidor' });
   }
-};*/
+};

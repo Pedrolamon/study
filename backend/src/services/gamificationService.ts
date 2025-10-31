@@ -32,7 +32,9 @@ export class GamificationService {
           userId,
           title: 'Pontos Ganhos!',
           message: `Você ganhou ${points} pontos por: ${reason}`,
-          type: 'ACHIEVEMENT'
+          type: 'ACHIEVEMENT',
+          isRead: false,
+          isEmailSent: false,
         });
       }
     } catch (error) {
