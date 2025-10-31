@@ -1,27 +1,52 @@
-/*import { Request, Response } from 'express';
-import { StudySessionModel } from '../models/StudySession';
-import type { StudySession, PaginationParams, PaginatedResponse } from '../types';
-import { GamificationService } from '../services/gamificationService';
+import { Request, Response } from 'express';
+import prisma from '../lib/prisma';
+import { StudySession } from '@prisma/client';
 
 interface AuthRequest extends Request {
   user?: any;
 }
 
+interface PaginationParams{
+  page?:string;
+  limit?:string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  mode?: string;
+  isActive?: string;
+  startDate?: string;
+  endDate?: string;
+}
+
+interface PaginatedResponse<T>{
+  data: T[];
+  pagination:{
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  }
+}
+
 export const createStudySession = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     const { mode, subject, duration } = req.body;
 
-    const session = new StudySessionModel({
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User not authenticated' });
+      return;
+    }
+
+    const session = await prisma.studySession.create({
+      data:{
       userId,
       mode,
       subject,
       startTime: new Date().toISOString(),
-      duration,
+      duration: Number(duration),
       isActive: true
+      }
     });
-
-    await session.save();
 
     res.status(201).json({
       success: true,
@@ -49,7 +74,7 @@ export const createStudySession = async (req: AuthRequest, res: Response): Promi
 
 export const getStudySessions = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     const { 
       page = 1, 
       limit = 20, 
@@ -59,9 +84,14 @@ export const getStudySessions = async (req: AuthRequest, res: Response): Promise
       isActive,
       startDate,
       endDate
-    } = req.query;
+    } = req.query as PaginationParams;
+
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
+    const skip = (pageNum - 1) * limitNum;
 
     const filter: any = { userId };
+
 
     // Apply filters
     if (mode) {
@@ -72,29 +102,28 @@ export const getStudySessions = async (req: AuthRequest, res: Response): Promise
     }
     if (startDate || endDate) {
       filter.startTime = {};
-      if (startDate) filter.startTime.$gte = startDate;
-      if (endDate) filter.startTime.$lte = endDate;
+      if (startDate) filter.startTime.gte = new Date(startDate);
+      if (endDate) filter.startTime.lte = new Date(endDate);
     }
+    const orderBy: any = {[sortBy as string]: sortOrder as 'asc' | 'desc'};
 
-    const skip = (Number(page) - 1) * Number(limit);
-    const sort: any = { [sortBy as string]: sortOrder === 'desc' ? -1 : 1 };
-
-    const [sessions, total] = await Promise.all([
-      StudySessionModel.find(filter)
-        .sort(sort)
-        .skip(skip)
-        .limit(Number(limit))
-        .lean(),
-      StudySessionModel.countDocuments(filter)
+    const [sessions, total] = await prisma.$transaction([
+      prisma.studySession.findMany({
+        where: filter,
+        orderBy,
+        skip,
+        take: limitNum, 
+      }),
+      prisma.studySession.count({ where: filter }), 
     ]);
 
     const totalPages = Math.ceil(total / Number(limit));
 
     const response: PaginatedResponse<StudySession> = {
-      data: sessions,
+      data: sessions as StudySession[],
       pagination: {
-        page: Number(page),
-        limit: Number(limit),
+        page: pageNum,
+        limit: limitNum,
         total,
         totalPages
       }
@@ -115,10 +144,14 @@ export const getStudySessions = async (req: AuthRequest, res: Response): Promise
 
 export const getStudySessionById = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     const { id } = req.params;
 
-    const session = await StudySessionModel.findOne({ _id: id, userId });
+    if(!userId){
+      res.status(400).json({success: false, error: 'User not authenticated'})
+      return;
+    }
+    const session = await prisma.studySession.findFirst({ where:{id: id, userId } as any});
     
     if (!session) {
       res.status(404).json({
@@ -143,10 +176,20 @@ export const getStudySessionById = async (req: AuthRequest, res: Response): Prom
 
 export const endStudySession = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     const { id } = req.params;
 
-    const session = await StudySessionModel.findOne({ _id: id, userId, isActive: true });
+    if (!id) {
+      res.status(400).json({ success: false, error: 'Study session ID is missing' });
+      return;
+  }
+
+    const session = await prisma.studySession.findFirst({ 
+      where:{
+        id,
+        userId,
+        isActive: true},
+      select: {id: true, startTime: true, userId: true} });
     
     if (!session) {
       res.status(404).json({
@@ -155,19 +198,20 @@ export const endStudySession = async (req: AuthRequest, res: Response): Promise<
       });
       return;
     }
-
-    session.endTime = new Date().toISOString();
-    session.isActive = false;
     
-    // Calculate actual duration
-    const startTime = new Date(session.startTime);
-    const endTime = new Date(session.endTime);
-    session.duration = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60)); // in minutes
+    const endTime = new Date();
+    const startTime = new Date(session.startTime as string);
+    const durationInMinutes = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60));
 
-    await session.save();
-
-    // Award points for study session
-    await GamificationService.awardStudyPoints(userId, session);
+    // 2. Atualiza a sessão
+     await prisma.studySession.update({
+      where: { id: session.id as string } as any,
+      data: {
+          endTime: endTime.toISOString(),
+          isActive: false,
+          duration: durationInMinutes,
+      }
+  });
 
     res.status(200).json({
       success: true,
@@ -185,11 +229,22 @@ export const endStudySession = async (req: AuthRequest, res: Response): Promise<
 
 export const updateStudySession = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     const { id } = req.params;
     const updates = req.body;
 
-    const session = await StudySessionModel.findOne({ _id: id, userId });
+    const session = await prisma.studySession.update({
+       where:{
+        id, 
+        userId
+      } as any,
+    data: {
+      ...updates,
+      startTime:updates.startTime ? new Date(updates.startTime) : updates.startTime,
+      endTime: updates.endTime ? new Date(updates.endTime) : updates.endTime,
+      duration: updates.duration ? Number(updates.duration) : updates.duration,
+    },
+  });
     
     if (!session) {
       res.status(404).json({
@@ -198,10 +253,6 @@ export const updateStudySession = async (req: AuthRequest, res: Response): Promi
       });
       return;
     }
-
-    // Update fields
-    Object.assign(session, updates);
-    await session.save();
 
     res.status(200).json({
       success: true,
@@ -229,10 +280,15 @@ export const updateStudySession = async (req: AuthRequest, res: Response): Promi
 
 export const deleteStudySession = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     const { id } = req.params;
 
-    const session = await StudySessionModel.findOneAndDelete({ _id: id, userId });
+    const session = await prisma.studySession.delete({ 
+      where:{
+        id,
+        userId,
+       } as any
+  });
     
     if (!session) {
       res.status(404).json({
@@ -257,60 +313,59 @@ export const deleteStudySession = async (req: AuthRequest, res: Response): Promi
 
 export const getStudyStats = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const userId = req.user._id;
+    const userId = req.user.id;
     const { period = 'all' } = req.query;
+    
+    if (!userId) {
+      res.status(401).json({ success: false, error: 'User not authenticated' });
+      return;
+    }
 
     let dateFilter: any = {};
+    const today = new Date();
     
     if (period === 'today') {
-      const today = new Date();
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-      dateFilter = {
-        startTime: {
-          $gte: startOfDay.toISOString(),
-          $lt: endOfDay.toISOString()
-        }
-      };
+      dateFilter = { gte: startOfDay, lt: endOfDay };
     } else if (period === 'week') {
-      const today = new Date();
       const startOfWeek = new Date(today);
       startOfWeek.setDate(today.getDate() - today.getDay());
       const endOfWeek = new Date(startOfWeek);
       endOfWeek.setDate(startOfWeek.getDate() + 7);
-      dateFilter = {
-        startTime: {
-          $gte: startOfWeek.toISOString(),
-          $lt: endOfWeek.toISOString()
-        }
-      };
+      dateFilter = { gte: startOfWeek, lt: endOfWeek };
     } else if (period === 'month') {
-      const today = new Date();
       const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
       const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-      dateFilter = {
-        startTime: {
-          $gte: startOfMonth.toISOString(),
-          $lt: endOfMonth.toISOString()
-        }
-      };
+      dateFilter = { gte: startOfMonth, lt: endOfMonth };
     }
 
-    const filter = { userId, ...dateFilter };
+    const filter = { 
+      userId, 
+      ...(Object.keys(dateFilter).length > 0 && { startTime: dateFilter })
+    };
 
-    const [totalSessions, totalTime, sessionsByMode] = await Promise.all([
-      StudySessionModel.countDocuments(filter),
-      StudySessionModel.aggregate([
-        { $match: filter },
-        { $group: { _id: null, totalDuration: { $sum: '$duration' } } }
-      ]),
-      StudySessionModel.aggregate([
-        { $match: filter },
-        { $group: { _id: '$mode', count: { $sum: 1 }, totalDuration: { $sum: '$duration' } } }
-      ])
-    ]);
+    const totalSessions = await prisma.studySession.count({ where: filter });
+    
+    const totalTimeAgg = await prisma.studySession.aggregate({
+        _sum: { duration: true },
+        where: filter,
+    });
+    
+    const sessionsByModeAgg = await prisma.studySession.groupBy({
+        by: ['mode'],
+        _sum: { duration: true },
+        _count: { mode: true },
+        where: filter,
+    });
+    
+    const sessionsByMode = sessionsByModeAgg.map(item => ({
+        _id: item.mode, 
+        count: item._count.mode,
+        totalDuration: item._sum.duration || 0,
+    }));
 
-    const totalDuration = totalTime[0]?.totalDuration || 0;
+    const totalDuration = totalTimeAgg._sum.duration || 0;
     const averageSessionDuration = totalSessions > 0 ? Math.round(totalDuration / totalSessions) : 0;
 
     res.status(200).json({
@@ -330,4 +385,4 @@ export const getStudyStats = async (req: AuthRequest, res: Response): Promise<vo
       error: 'Internal server error'
     });
   }
-}; */
+};
