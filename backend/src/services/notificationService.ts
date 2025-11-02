@@ -1,4 +1,4 @@
-import nodemailer from 'nodemailer';
+import * as nodemailer from 'nodemailer';
 import prisma from '../lib/prisma';
 
 interface Notification {
@@ -17,7 +17,7 @@ interface Notification {
 
 // Email configuration
 const createTransporter = () => {
-  return nodemailer.createTransporter({
+  return nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: Number(process.env.SMTP_PORT) || 587,
     secure: false,
@@ -130,7 +130,20 @@ export class NotificationService {
     email: string
   ): Promise<boolean> {
     try {
-      await transporter.sendMail(mailOptions);
+      const transporter = createTransporter();
+
+      const mailOptions = {
+        from: process.env.SMTP_USER, 
+        to: email, 
+        subject: title, 
+        text: message, 
+        html: `<p>${message}</p>` 
+      };
+  
+      // 3. Enviar o e-mail
+      await transporter.sendMail(mailOptions); 
+  
+      console.log(`Email enviado para ${email} com sucesso!`);
 
       // Mark notification as email sent
       await prisma.notification.updateMany({
@@ -243,14 +256,14 @@ export class NotificationService {
   // Get notification statistics
   static async getNotificationStats(userId: string) {
     const [total, unread, byType] = await Promise.all([
-      NotificationModel.count({ where: { userId } }),
-      NotificationModel.count({ where: { userId, isRead: false } }),
-      NotificationModel.groupBy({
-        by: ['type'],
-        where: { userId },
-        _count: { type: true }
-      })
-    ]);
+      prisma.notification.count({ where: { userId } }),
+      prisma.notification.count({ where: { userId, isRead: false } }),
+      prisma.notification.groupBy({
+                by: ['type'],
+                where: { userId },
+                _count: { type: true }
+              })
+            ]);
 
     return {
       total,
