@@ -38,6 +38,13 @@ export const markAsRead = async (req: Request, res: Response<ApiResponse>) => {
     const userId = req.user!.id;
     const { notificationId } = req.params;
 
+    if (!notificationId) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID da notificação é obrigatório.'
+      });
+    }
+
     await NotificationService.markAsRead(notificationId, userId);
 
     res.json({
@@ -76,6 +83,13 @@ export const deleteNotification = async (req: Request, res: Response<ApiResponse
   try {
     const userId = req.user!.id;
     const { notificationId } = req.params;
+
+    if (!notificationId) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID da notificação é obrigatório.'
+      });
+    }
 
     await NotificationService.deleteNotification(notificationId, userId);
 

@@ -199,13 +199,13 @@ model Reminder {
 
 // Achievement Model
 model Achievement {
-  id           String   @id @default(cuid())
-  userId       String
-  badgeId      String
-  unlockedAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  userId     String
+  badgeId    String
+  unlockedAt DateTime @default(now())
+
   pointsEarned Int
 
-  // Relations
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("achievements")

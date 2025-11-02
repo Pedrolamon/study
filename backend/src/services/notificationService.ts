@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { NotificationModel } from '../models';
+import prisma from '../lib/prisma';
 
 interface Notification {
   id: string;
@@ -29,12 +29,11 @@ const createTransporter = () => {
 };
 
 export class NotificationService {
-  // Create notification
   static async createNotification(notificationData: Omit<Notification, 'id' | 'createdAt' | 'updatedAt'>): Promise<Notification> {
-    const notification = await NotificationModel.create({
+    const notification = await prisma.notification.create({
       data: notificationData
     });
-    return notification;
+    return notification as Notification;
   }
 
   // Create scheduled notification
@@ -57,8 +56,12 @@ export class NotificationService {
   }
 
   // Get user notifications
-  static async getUserNotifications(userId: string, limit: number = 20, offset: number = 0) {
-    return await NotificationModel.findMany({
+  static async getUserNotifications(userId: string, limit: number = 20, offset: number = 0, isRead?: boolean ) {
+    const whereCondition: any = { userId };
+    if (isRead !== undefined) {
+      whereCondition.isRead = isRead;
+    }
+    return await prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       take: limit,
@@ -68,7 +71,7 @@ export class NotificationService {
 
   // Get unread notifications
   static async getUnreadNotifications(userId: string) {
-    return await NotificationModel.findMany({
+    return await prisma.notification.findMany({
       where: {
         userId,
         isRead: false
@@ -79,7 +82,7 @@ export class NotificationService {
 
   // Mark notification as read
   static async markAsRead(notificationId: string, userId: string): Promise<boolean> {
-    const result = await NotificationModel.updateMany({
+    const result = await prisma.notification.updateMany({
       where: {
         id: notificationId,
         userId
@@ -94,7 +97,7 @@ export class NotificationService {
 
   // Mark all notifications as read
   static async markAllAsRead(userId: string): Promise<number> {
-    const result = await NotificationModel.updateMany({
+    const result = await prisma.notification.updateMany({
       where: {
         userId,
         isRead: false
@@ -109,7 +112,7 @@ export class NotificationService {
 
   // Delete notification
   static async deleteNotification(notificationId: string, userId: string): Promise<boolean> {
-    const result = await NotificationModel.deleteMany({
+    const result = await prisma.notification.deleteMany({
       where: {
         id: notificationId,
         userId
@@ -127,28 +130,10 @@ export class NotificationService {
     email: string
   ): Promise<boolean> {
     try {
-      const transporter = createTransporter();
-      
-      const mailOptions = {
-        from: process.env.SMTP_USER,
-        to: email,
-        subject: title,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #333;">${title}</h2>
-            <p style="color: #666; line-height: 1.6;">${message}</p>
-            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-            <p style="color: #999; font-size: 12px;">
-              Esta é uma notificação automática do Study App.
-            </p>
-          </div>
-        `
-      };
-
       await transporter.sendMail(mailOptions);
 
       // Mark notification as email sent
-      await NotificationModel.updateMany({
+      await prisma.notification.updateMany({
         where: {
           userId,
           title,
@@ -171,7 +156,7 @@ export class NotificationService {
   static async processScheduledNotifications(): Promise<void> {
     const now = new Date();
     
-    const scheduledNotifications = await NotificationModel.findMany({
+    const scheduledNotifications = await prisma.notification.findMany({
       where: {
         scheduledFor: { lte: now },
         isEmailSent: false
@@ -197,7 +182,7 @@ export class NotificationService {
       }
 
       // Mark as sent
-      await NotificationModel.update({
+      await prisma.notification.update({
         where: { id: notification.id },
         data: {
           isEmailSent: true,

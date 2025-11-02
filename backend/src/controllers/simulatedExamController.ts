@@ -1,21 +1,30 @@
-/*import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { SimulatedExamModel } from '../models';
+import { PrismaClient } from '@prisma/client';
+
 
 interface AuthRequest extends Request {
   user?: any;
 }
+
+const prisma = new PrismaClient();
 
 export const getExams = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     const { subject } = req.query;
 
+    if (!userId) {
+      return res.status(401).json({ message: 'Usuário não autenticado' });
+    }
+
     let whereClause: any = { userId };
+
     if (subject) {
       whereClause.subject = subject;
     }
 
-    const exams = await SimulatedExamModel.findMany({
+    const exams = await prisma.simulatedExam.findMany({
       where: whereClause,
       orderBy: { createdAt: 'desc' },
       include: {
@@ -40,7 +49,7 @@ export const getExam = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.id;
 
-    const exam = await SimulatedExamModel.findFirst({
+    const exam = await prisma.simulatedExam.findFirst({
       where: { id, userId },
       include: {
         user: {
@@ -83,7 +92,7 @@ export const createExam = async (req: AuthRequest, res: Response) => {
       userId
     };
 
-    const exam = await SimulatedExamModel.create({
+    const exam = await prisma.simulatedExam.create({
       data: examData
     });
 
@@ -105,7 +114,7 @@ export const updateExam = async (req: AuthRequest, res: Response) => {
     delete updates.userId;
     delete updates.createdAt;
 
-    const exam = await SimulatedExamModel.updateMany({
+    const exam = await prisma.simulatedExam.updateMany({
       where: { id, userId },
       data: updates
     });
@@ -114,7 +123,7 @@ export const updateExam = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ message: 'Simulado não encontrado' });
     }
 
-    const updatedExam = await SimulatedExamModel.findUnique({
+    const updatedExam = await prisma.simulatedExam.findUnique({
       where: { id }
     });
 
@@ -130,7 +139,7 @@ export const deleteExam = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.id;
 
-    const exam = await SimulatedExamModel.deleteMany({
+    const exam = await prisma.simulatedExam.deleteMany({
       where: { id, userId }
     });
 
@@ -149,7 +158,7 @@ export const getExamStats = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
 
-    const results = await SimulatedExamModel.findMany({
+    const results = await prisma.simulatedExam.findMany({
       where: { userId }
     });
 
@@ -216,4 +225,4 @@ export const getExamsBySubject = async (req: AuthRequest, res: Response) => {
     console.error('Erro ao buscar simulados por disciplina:', error);
     res.status(500).json({ message: 'Erro interno do servidor' });
   }
-};*/
+};

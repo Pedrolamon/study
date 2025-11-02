@@ -3,14 +3,14 @@ import { PrismaClient } from '@prisma/client';
 import { ApiResponse, PaginatedResponse } from '../types';
 import { GamificationService } from '../services/gamificationService';
 import fs from 'fs/promises';
-import path from 'path';
+
 
 const prisma = new PrismaClient();
 
 type StudyMaterial = Awaited<ReturnType<typeof prisma.studyMaterial.create>>;
 
 interface StudyMaterialsQuery {
-  page?: string; // Query parameters are always strings or arrays of strings
+  page?: string;
   limit?: string;
   category?: string;
   isPublic?: string;
