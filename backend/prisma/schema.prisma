@@ -203,6 +203,7 @@ model Achievement {
   userId     String
   badgeId    String
   unlockedAt DateTime @default(now())
+  badge      Badge    @relation(fields: [badgeId], references: [id])
 
   pointsEarned Int
 
@@ -239,6 +240,8 @@ model Badge {
   requirements Json
   isUnlocked   Boolean       @default(false)
   unlockedAt   DateTime?
+
+  achievements Achievement[]
 
   @@map("badges")
 }
