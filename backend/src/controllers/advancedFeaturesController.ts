@@ -1,8 +1,5 @@
-/*import { Request, Response } from 'express';
-import { FlashcardModel, SpacedRepetitionModel } from '../models';
+import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
-
-
 
 interface AuthRequest extends Request {
   user?: any;
@@ -56,7 +53,7 @@ class SpacedRepetitionAlgorithm {
 
   static async getDueCards(userId: string, limit: number = 20) {
     const now = new Date();
-    return await SpacedRepetitionModel.findMany({
+    return await prisma.spacedRepetition.findMany({
       where: {
         userId,
         nextReview: { lte: now }
@@ -73,28 +70,28 @@ class SpacedRepetitionAlgorithm {
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-    const [totalCards, dueToday, reviewedToday, avgEase] = await Promise.all([
-      FlashcardModel.findMany({ where: { userId } }).then(cards => cards.length),
-      SpacedRepetitionModel.count({
+    const [totalCardsCount, dueToday, reviewedToday, avgEase] = await Promise.all([
+      prisma.flashcard.count({ where: { userId } }),
+      prisma.spacedRepetition.count({
         where: {
           userId,
           nextReview: { lte: now }
         }
       }),
-      SpacedRepetitionModel.count({
+      prisma.spacedRepetition.count({
         where: {
           userId,
           lastReviewed: { gte: today }
         }
       }),
-      SpacedRepetitionModel.aggregate({
+      prisma.spacedRepetition.aggregate({
         where: { userId },
         _avg: { easeFactor: true }
       }).then(result => result._avg.easeFactor || 2.5)
     ]);
 
     return {
-      totalCards,
+      totalCards: totalCardsCount,
       dueToday,
       reviewedToday,
       averageEaseFactor: avgEase
@@ -112,7 +109,7 @@ export const getFlashcards = async (req: AuthRequest, res: Response) => {
     if (category) whereClause.category = category;
     if (tags) whereClause.tags = { has: (tags as string).split(',') };
 
-    const flashcards = await FlashcardModel.findMany({
+    const flashcards = await prisma.flashcard.findMany({
       where: whereClause,
       orderBy: { createdAt: 'desc' },
       take: Number(limit)
@@ -130,7 +127,7 @@ export const createFlashcard = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     const { question, answer, category, difficulty, tags } = req.body;
 
-    const flashcard = await FlashcardModel.create({
+    const flashcard = await prisma.flashcard.create({
       data: {
         userId,
         question,
@@ -142,7 +139,7 @@ export const createFlashcard = async (req: AuthRequest, res: Response) => {
     });
 
     // Create initial spaced repetition entry
-    await SpacedRepetitionModel.create({
+    await prisma.spacedRepetition.create({
       data: {
         userId,
         flashcardId: flashcard.id,
@@ -166,7 +163,11 @@ export const updateFlashcard = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     const updates = req.body;
 
-    const flashcard = await FlashcardModel.updateMany({
+    if (!id || !userId) {
+      return res.status(400).json({ message: 'ID ou usuário inválido' });
+    }
+
+    const flashcard = await prisma.flashcard.updateMany({
       where: { id, userId },
       data: updates
     });
@@ -175,7 +176,7 @@ export const updateFlashcard = async (req: AuthRequest, res: Response) => {
       return res.status(404).json({ message: 'Flashcard não encontrado' });
     }
 
-    const updatedFlashcard = await FlashcardModel.findUnique({
+    const updatedFlashcard = await prisma.flashcard.findUnique({
       where: { id }
     });
 
@@ -191,7 +192,11 @@ export const deleteFlashcard = async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
     const userId = req.user?.id;
 
-    const flashcard = await FlashcardModel.deleteMany({
+    if (!id || !userId) {
+      return res.status(400).json({ message: 'ID ou usuário inválido' });
+    }
+
+    const flashcard = await prisma.flashcard.deleteMany({
       where: { id, userId }
     });
 
@@ -200,7 +205,7 @@ export const deleteFlashcard = async (req: AuthRequest, res: Response) => {
     }
 
     // Delete associated spaced repetition entries
-    await SpacedRepetitionModel.deleteMany({
+    await prisma.spacedRepetition.deleteMany({
       where: { flashcardId: id, userId }
     });
 
@@ -231,7 +236,7 @@ export const submitReview = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     const { flashcardId, responseQuality, timeSpent } = req.body;
 
-    const currentReview = await SpacedRepetitionModel.findFirst({
+    const currentReview = await prisma.spacedRepetition.findFirst({
       where: {
         userId,
         flashcardId
@@ -255,7 +260,7 @@ export const submitReview = async (req: AuthRequest, res: Response) => {
     const nextReviewDate = new Date();
     nextReviewDate.setDate(nextReviewDate.getDate() + newInterval);
 
-    const updatedReview = await SpacedRepetitionModel.update({
+    const updatedReview = await prisma.spacedRepetition.update({
       where: { id: currentReview.id },
       data: {
         interval: newInterval,
@@ -284,4 +289,4 @@ export const getReviewStats = async (req: AuthRequest, res: Response) => {
     console.error('Erro ao buscar estatísticas de revisão:', error);
     res.status(500).json({ message: 'Erro interno do servidor' });
   }
-};*/
+};

@@ -47,7 +47,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         _id: user.id,
         email: user.email,
         name: user.name,
-        avatar: user.avatar,
+        avatar: user.avatar || "",
         isActive: user.isActive,
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString()
@@ -119,7 +119,7 @@ export const login = async (req: Request, res: Response): Promise<void> => {
         _id: user.id,
         email: user.email,
         name: user.name,
-        avatar: user.avatar,
+        avatar: user.avatar || "",
         isActive: user.isActive,
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString()

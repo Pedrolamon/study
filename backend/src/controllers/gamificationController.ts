@@ -1,4 +1,4 @@
-/*import { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { GamificationService } from '../services/gamificationService';
 import { asyncHandler } from '../middleware/errorHandler';
 
@@ -170,4 +170,4 @@ export class GamificationController {
       data: config
     });
   });
-} */
+} 

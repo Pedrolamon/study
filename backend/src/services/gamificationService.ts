@@ -34,7 +34,7 @@ export class GamificationService {
           message: `Você ganhou ${points} pontos por: ${reason}`,
           type: 'ACHIEVEMENT',
           isRead: false,
-          isEmailSent: false,
+          isEmailSent: false,
         });
       }
     } catch (error) {
@@ -178,7 +178,9 @@ export class GamificationService {
         userId,
         title: 'Level Up!',
         message: `Parabéns! Você subiu para o nível ${newLevel}!`,
-        type: 'ACHIEVEMENT'
+        type: 'ACHIEVEMENT',
+        isRead: false,
+        isEmailSent: false
       });
     }
   }
@@ -218,57 +220,64 @@ export class GamificationService {
 
   // Unlock badge
   private static async unlockBadge(userId: string, badgeName: string): Promise<void> {
-    // Check if badge already exists
-    const existingBadge = await prisma.badge.findFirst({
-      where: { name: badgeName }
+    let badge = await prisma.badge.findFirst({
+        where: { name: badgeName }
     });
 
-    if (!existingBadge) {
-      // Create badge if it doesn't exist
-      await prisma.badge.create({
-        data: {
-          name: badgeName,
-          description: `Badge: ${badgeName}`,
-          icon: '🏆',
-          category: 'ACHIEVEMENT',
-          pointsReward: 50,
-          requirements: {}
-        }
-      });
+    if (!badge) {
+        badge = await prisma.badge.create({
+            data: {
+                name: badgeName,
+                description: `Badge: ${badgeName}`,
+                icon: '🏆',
+                category: 'ACHIEVEMENT',
+                pointsReward: this.POINTS_CONFIG.badge_unlocked,
+                requirements: {}
+            }
+        });
     }
 
-    // Check if user already has this achievement
+    if (!badge) {
+        console.error(`Não foi possível encontrar ou criar o badge com nome: ${badgeName}`);
+        return;
+    }
+    
+    const badgeId = badge.id; 
+
     const existingAchievement = await prisma.achievement.findFirst({
-      where: {
-        userId,
-        badge: { name: badgeName }
-      }
+        where: {
+            userId: userId,
+            badgeId: badgeId, 
+        }
     });
 
     if (!existingAchievement) {
-      // Create achievement
-      await prisma.achievement.create({
-        data: {
-          userId,
-          badgeId: existingBadge?.id || '',
-          pointsEarned: 50
-        }
-      });
+        await prisma.achievement.create({
+            data: {
+                userId,
+                badgeId: badgeId, 
+                pointsEarned: this.POINTS_CONFIG.badge_unlocked 
+            }
+        });
 
-      // Award points for badge
-      await this.addPoints(userId, this.POINTS_CONFIG.badge_unlocked, `Badge desbloqueado: ${badgeName}`, 'badge_unlock');
+        await this.addPoints(
+            userId, 
+            this.POINTS_CONFIG.badge_unlocked, 
+            `Badge desbloqueado: ${badgeName}`, 
+            'badge_unlock'
+        );
 
-      // Send notification
-      await NotificationService.createNotification({
-        userId,
-        title: 'Badge Desbloqueado!',
-        message: `Parabéns! Você desbloqueou o badge: ${badgeName}`,
-        type: 'ACHIEVEMENT'
-      });
+        await NotificationService.createNotification({
+            userId,
+            title: 'Badge Desbloqueado!',
+            message: `Parabéns! Você desbloqueou o badge: ${badgeName}`,
+            type: 'ACHIEVEMENT',
+            isRead: false,
+            isEmailSent: false
+        });
     }
-  }
+}
 
-  // Get user statistics
   static async getUserStats(userId: string) {
     const userPoints = await this.getOrCreateUserPoints(userId);
     

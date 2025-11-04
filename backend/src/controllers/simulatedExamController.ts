@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { SimulatedExamModel } from '../models';
 import { PrismaClient } from '@prisma/client';
+import { string } from 'joi';
 
 
 interface AuthRequest extends Request {
@@ -215,7 +216,7 @@ export const getExamsBySubject = async (req: AuthRequest, res: Response) => {
     const userId = req.user?.id;
     const { subject } = req.params;
 
-    const exams = await SimulatedExamModel.findMany({
+    const exams = await prisma.simulatedExam.findMany({
       where: { userId, subject },
       orderBy: { createdAt: 'desc' }
     });
