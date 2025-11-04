@@ -1,27 +1,30 @@
 import { Request, Response } from 'express';
-
+import { PrismaClient, Flashcard as PrismaFlashcard } from '@prisma/client';
 import { ApiResponse, PaginatedResponse, FlashcardQuery, Flashcard} from '../types';
 import { GamificationService } from '../services/gamificationService';
 
+const prisma = new PrismaClient();
+
+const getUserId = (req: Request): string => req.user!.id;
+
 export const createFlashcard = async (req: Request, res: Response<ApiResponse>) => {
   try {
-    const userId = req.user!.id;
+    const userId = getUserId(req);
     const { question, answer, category, difficulty, tags } = req.body;
 
-    const flashcard = new FlashcardModel({
+    const newFlashcard = await prisma.flashcard.create({
+      data: {
       userId,
       question,
       answer,
       category,
       difficulty: difficulty || 'medium',
       tags: tags || []
-    });
-
-    await flashcard.save();
+  }});
 
     res.status(201).json({
       success: true,
-      data: flashcard,
+      data: newFlashcard as unknown as Flashcard,
       message: 'Flashcard criado com sucesso'
     });
   } catch (error) {
@@ -44,29 +47,30 @@ export const getFlashcards = async (req: Request<{}, {}, {}, FlashcardQuery>, re
     const readyForReview = req.query.readyForReview === 'true';
 
     const skip = (page - 1) * limit;
-    const query: any = { userId };
+    const where: any = { userId };
 
-    if (category) query.category = category;
-    if (difficulty) query.difficulty = difficulty;
-    if (isActive !== undefined) query.isActive = isActive;
+    if (category) where.category = category;
+    if (difficulty) where.difficulty = difficulty;
+    if (isActive !== undefined) where.isActive = isActive;
     if (readyForReview) {
-      query.$or = [
-        { nextReview: { $exists: false } },
-        { nextReview: { $lte: new Date() } }
+      where.$or = [
+        { nextReview: null },
+        { nextReview: { lte: new Date() } }
       ];
     }
 
-    const [flashcards, total] = await Promise.all([
-      FlashcardModel.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      FlashcardModel.countDocuments(query)
+    const [flashcards, total] = await prisma.$transaction([
+      prisma.flashcard.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit
+      }),
+      prisma.flashcard.count({ where })
     ]);
 
     const result: PaginatedResponse<Flashcard> = {
-      data: flashcards,
+      data: flashcards as unknown as Flashcard[],
       pagination: {
         page,
         limit,
@@ -91,10 +95,10 @@ export const getFlashcards = async (req: Request<{}, {}, {}, FlashcardQuery>, re
 
 export const getFlashcardById = async (req: Request, res: Response<ApiResponse>) => {
   try {
-    const userId = req.user!.id;
+    const userId = getUserId(req);
     const { flashcardId } = req.params;
 
-    const flashcard = await FlashcardModel.findOne({ _id: flashcardId, userId });
+    const flashcard = await prisma.flashcard.findFirst({ where:{id: flashcardId as string, userId }});
 
     if (!flashcard) {
       return res.status(404).json({
@@ -105,7 +109,7 @@ export const getFlashcardById = async (req: Request, res: Response<ApiResponse>)
 
     res.json({
       success: true,
-      data: flashcard,
+      data: flashcard as unknown as Flashcard,
       message: 'Flashcard recuperado com sucesso'
     });
   } catch (error) {
@@ -120,11 +124,11 @@ export const getFlashcardById = async (req: Request, res: Response<ApiResponse>)
 
 export const updateFlashcard = async (req: Request, res: Response<ApiResponse>) => {
   try {
-    const userId = req.user!.id;
+    const userId = getUserId(req);
     const { flashcardId } = req.params;
     const { question, answer, category, difficulty, tags, isActive } = req.body;
 
-    const flashcard = await FlashcardModel.findOne({ _id: flashcardId, userId });
+    const flashcard = await prisma.flashcard.findFirst({ where:{id: flashcardId as string, userId }});
 
     if (!flashcard) {
       return res.status(404).json({
@@ -132,19 +136,22 @@ export const updateFlashcard = async (req: Request, res: Response<ApiResponse>) 
         message: 'Flashcard não encontrado'
       });
     }
+   const updateData: Partial<PrismaFlashcard> = {}
+    if (question !== undefined) updateData.question = question;
+    if (answer !== undefined) updateData.answer = answer;
+    if (category !== undefined) updateData.category = category;
+    if (difficulty !== undefined) updateData.difficulty = difficulty;
+    if (tags !== undefined) updateData.tags = tags;
+    if (isActive !== undefined) updateData.isActive = isActive;
 
-    if (question !== undefined) flashcard.question = question;
-    if (answer !== undefined) flashcard.answer = answer;
-    if (category !== undefined) flashcard.category = category;
-    if (difficulty !== undefined) flashcard.difficulty = difficulty;
-    if (tags !== undefined) flashcard.tags = tags;
-    if (isActive !== undefined) flashcard.isActive = isActive;
-
-    await flashcard.save();
+    const updatedFlashcard = await prisma.flashcard.update({
+      where: { id: flashcardId as string, userId },
+      data: updateData
+    });
 
     res.json({
       success: true,
-      data: flashcard,
+      data: updatedFlashcard as unknown as Flashcard,
       message: 'Flashcard atualizado com sucesso'
     });
   } catch (error) {
@@ -159,10 +166,10 @@ export const updateFlashcard = async (req: Request, res: Response<ApiResponse>) 
 
 export const deleteFlashcard = async (req: Request, res: Response<ApiResponse>) => {
   try {
-    const userId = req.user!.id;
+    const userId = getUserId(req);
     const { flashcardId } = req.params;
 
-    const flashcard = await FlashcardModel.findOneAndDelete({ _id: flashcardId, userId });
+    const flashcard = await prisma.flashcard.delete({ where: {id: flashcardId as string, userId }});
 
     if (!flashcard) {
       return res.status(404).json({
@@ -187,7 +194,7 @@ export const deleteFlashcard = async (req: Request, res: Response<ApiResponse>) 
 
 export const reviewFlashcard = async (req: Request, res: Response<ApiResponse>) => {
   try {
-    const userId = req.user!.id;
+    const userId = getUserId(req);
     const { flashcardId } = req.params;
     const { wasCorrect } = req.body;
 
@@ -198,7 +205,7 @@ export const reviewFlashcard = async (req: Request, res: Response<ApiResponse>) 
       });
     }
 
-    const flashcard = await FlashcardModel.findOne({ _id: flashcardId, userId });
+    const flashcard = await prisma.flashcard.findFirst({where: {id: flashcardId as string, userId }});
 
     if (!flashcard) {
       return res.status(404).json({
@@ -207,11 +214,16 @@ export const reviewFlashcard = async (req: Request, res: Response<ApiResponse>) 
       });
     }
 
-    flashcard.calculateNextReview(wasCorrect);
-    await flashcard.save();
+    const updatedReviewData = calculateNextReviewPrisma(flashcardToReview, wasCorrect);
+    
+    // 2. Atualiza o flashcard com os novos dados de revisão
+    const updatedFlashcard = await prisma.flashcard.update({
+        where: { id: flashcardId as string },
+        data: updatedReviewData
+    });
 
     // Award points for flashcard review
-    await GamificationService.awardFlashcardPoints(userId, flashcard);
+    await GamificationService.awardFlashcardPoints(userId, updatedFlashcard as unknown as Flashcard);
 
     res.json({
       success: true,
@@ -233,21 +245,29 @@ export const resetFlashcardReview = async (req: Request, res: Response<ApiRespon
     const userId = req.user!.id;
     const { flashcardId } = req.params;
 
-    const flashcard = await FlashcardModel.findOne({ _id: flashcardId, userId });
+    const existingFlashcard = await prisma.flashcard.findFirst({ where:{id: flashcardId as string, userId }});
 
-    if (!flashcard) {
+    if (!existingFlashcard) {
       return res.status(404).json({
-        success: false,
-        message: 'Flashcard não encontrado'
+          success: false,
+          message: 'Flashcard não encontrado',
       });
-    }
+  }
+  const resetData = {
+      nextReview: null, 
+      reviewCount: 0,
+      interval: 0,
+      easinessFactor: 2.5,
+  };
 
-    flashcard.resetReview();
-    await flashcard.save();
+  const updatedFlashcard = await prisma.flashcard.update({
+      where: { id: flashcardId as string },
+      data: resetData
+  });
 
     res.json({
       success: true,
-      data: flashcard,
+      data: updatedFlashcard as unknown as Flashcard,
       message: 'Revisão do flashcard resetada com sucesso'
     });
   } catch (error) {
@@ -265,35 +285,38 @@ export const getFlashcardStats = async (req: Request, res: Response<ApiResponse>
     const userId = req.user!.id;
 
     const [total, active, readyForReview, byDifficulty, byCategory] = await Promise.all([
-      FlashcardModel.countDocuments({ userId }),
-      FlashcardModel.countDocuments({ userId, isActive: true }),
-      FlashcardModel.countDocuments({
+      prisma.flashcard.count({ where:{userId} }),
+      prisma.flashcard.count({ where:{userId, isActive: true} }),
+      prisma.flashcard.count({
+        where:{
         userId,
-        $or: [
-          { nextReview: { $exists: false } },
-          { nextReview: { $lte: new Date() } }
+        OR: [
+          { nextReview: null },
+          { nextReview: { lte: new Date() } }
         ]
-      }),
-      FlashcardModel.aggregate([
-        { $match: { userId: userId } },
-        { $group: { _id: '$difficulty', count: { $sum: 1 } } }
-      ]),
-      FlashcardModel.aggregate([
-        { $match: { userId: userId } },
-        { $group: { _id: '$category', count: { $sum: 1 } } }
-      ])
-    ]);
+  }}),
+      prisma.flashcard.groupBy({
+        by: ['difficulty'],
+        where: { userId },
+        _count: { id: true },
+  }),
+  prisma.flashcard.groupBy({
+    by: ['category'],
+    where: { userId },
+    _count: { id: true },
+  }),
+]);
 
     const stats = {
       total,
       active,
       readyForReview,
       byDifficulty: byDifficulty.reduce((acc, item) => {
-        acc[item._id] = item.count;
+        acc[item.difficulty] = item._count.id;
         return acc;
       }, {} as Record<string, number>),
       byCategory: byCategory.reduce((acc, item) => {
-        acc[item._id] = item.count;
+        acc[item.category] = item._count.id;
         return acc;
       }, {} as Record<string, number>)
     };
