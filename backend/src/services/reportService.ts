@@ -154,6 +154,70 @@ export class ReportService {
     };
   }
 
+  // Assuming 'prisma' is imported from '../models'
+// This replaces your original MongoDB/Mongoose function.
+static async getFlashcardReport(userId: string) {
+  const now = new Date();
+
+  const [total, active, readyForReview, byDifficulty, byCategory, reviewStats] = await Promise.all([
+      // 1. Total Count
+      prisma.flashcard.count({ where: { userId } }),
+      
+      // 2. Active Count
+      prisma.flashcard.count({ where: { userId, isActive: true } }),
+      
+      // 3. Ready For Review (nextReview is null OR nextReview <= now)
+      prisma.flashcard.count({
+          where: {
+              userId,
+              OR: [
+                  { nextReview: null }, // Equivalent to $exists: false
+                  { nextReview: { lte: now } }
+              ]
+          }
+      }),
+
+      // 4. Group by Difficulty (using groupBy)
+      prisma.flashcard.groupBy({
+          by: ['difficulty'],
+          _count: { difficulty: true },
+          where: { userId }
+      }),
+
+      // 5. Group by Category (using groupBy)
+      prisma.flashcard.groupBy({
+          by: ['category'],
+          _count: { category: true },
+          where: { userId }
+      }),
+
+      // 6. Review Stats (using aggregate)
+      prisma.flashcard.aggregate({
+          _sum: { reviewCount: true },
+          _avg: { reviewCount: true },
+          _max: { reviewCount: true },
+          where: { userId }
+      })
+  ]);
+
+  // Format the output to match the original structure
+  const formattedByDifficulty = byDifficulty.map(d => ({ difficulty: d.difficulty, count: d._count.difficulty }));
+  const formattedByCategory = byCategory.map(c => ({ category: c.category, count: c._count.category }));
+
+  return {
+      total,
+      active,
+      readyForReview,
+      byDifficulty: formattedByDifficulty,
+      byCategory: formattedByCategory,
+      reviewStats: {
+          totalReviews: reviewStats._sum.reviewCount || 0,
+          avgReviews: reviewStats._avg.reviewCount || 0,
+          maxReviews: reviewStats._max.reviewCount || 0,
+      }
+  };
+}
+
   // Relatório de performance por matéria
   static async getSubjectPerformanceReport(userId: string, period: 'week' | 'month' | 'year' = 'month') {
     const now = new Date();
