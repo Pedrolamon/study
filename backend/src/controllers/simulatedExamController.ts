@@ -1,7 +1,5 @@
 import { Request, Response } from 'express';
-import { SimulatedExamModel } from '../models';
 import { PrismaClient } from '@prisma/client';
-import { string } from 'joi';
 
 
 interface AuthRequest extends Request {
@@ -49,6 +47,8 @@ export const getExam = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
+    if (!id) {
+      return res.status(401).json({ message: 'Usuário não autenticado' });}
 
     const exam = await prisma.simulatedExam.findFirst({
       where: { id, userId },
@@ -115,6 +115,9 @@ export const updateExam = async (req: AuthRequest, res: Response) => {
     delete updates.userId;
     delete updates.createdAt;
 
+    if (!id) {
+      return res.status(401).json({ message: 'Usuário não autenticado' });}
+
     const exam = await prisma.simulatedExam.updateMany({
       where: { id, userId },
       data: updates
@@ -139,6 +142,9 @@ export const deleteExam = async (req: AuthRequest, res: Response) => {
   try {
     const { id } = req.params;
     const userId = req.user?.id;
+
+    if (!id) {
+      return res.status(401).json({ message: 'Usuário não autenticado' });}
 
     const exam = await prisma.simulatedExam.deleteMany({
       where: { id, userId }
@@ -215,6 +221,9 @@ export const getExamsBySubject = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     const { subject } = req.params;
+
+    if (!subject) {
+      return res.status(401).json({ message: 'Usuário não autenticado' });}
 
     const exams = await prisma.simulatedExam.findMany({
       where: { userId, subject },

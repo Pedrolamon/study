@@ -200,7 +200,7 @@ export const endStudySession = async (req: AuthRequest, res: Response): Promise<
     }
     
     const endTime = new Date();
-    const startTime = new Date(session.startTime as string);
+    const startTime = new Date(session.startTime);
     const durationInMinutes = Math.round((endTime.getTime() - startTime.getTime()) / (1000 * 60));
 
     // 2. Atualiza a sessão
