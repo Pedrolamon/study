@@ -154,37 +154,31 @@ export class ReportService {
     };
   }
 
-  // Assuming 'prisma' is imported from '../models'
-// This replaces your original MongoDB/Mongoose function.
+
 static async getFlashcardReport(userId: string) {
   const now = new Date();
 
   const [total, active, readyForReview, byDifficulty, byCategory, reviewStats] = await Promise.all([
-      // 1. Total Count
       prisma.flashcard.count({ where: { userId } }),
       
-      // 2. Active Count
       prisma.flashcard.count({ where: { userId, isActive: true } }),
       
-      // 3. Ready For Review (nextReview is null OR nextReview <= now)
       prisma.flashcard.count({
           where: {
               userId,
               OR: [
-                  { nextReview: null }, // Equivalent to $exists: false
+                  { nextReview: null },
                   { nextReview: { lte: now } }
               ]
           }
       }),
 
-      // 4. Group by Difficulty (using groupBy)
       prisma.flashcard.groupBy({
           by: ['difficulty'],
           _count: { difficulty: true },
           where: { userId }
       }),
 
-      // 5. Group by Category (using groupBy)
       prisma.flashcard.groupBy({
           by: ['category'],
           _count: { category: true },
@@ -297,6 +291,77 @@ static async getFlashcardReport(userId: string) {
     };
   }
 
+  // Refactored getStudyMaterialReport using Prisma
+static async getStudyMaterialReport(userId: string) {
+  // Note: Assuming your Study Material model in Prisma is named 'StudyMaterial'
+  
+  const [total, publicCount, totalSize, byCategory, byMimeType, downloadStats] = await Promise.all([
+      // 1. Total Count (StudyMaterialModel.countDocuments)
+      prisma.studyMaterial.count({ where: { userId } }),
+      
+      // 2. Public Count (StudyMaterialModel.countDocuments with filter)
+      prisma.studyMaterial.count({ where: { userId, isPublic: true } }),
+      
+      // 3. Total Size (MongoDB Aggregate for $sum)
+      prisma.studyMaterial.aggregate({
+          where: { userId },
+          _sum: { fileSize: true } // Assuming 'fileSize' is the field for size
+      }),
+      
+      // 4. By Category (MongoDB Aggregate for $group)
+      prisma.studyMaterial.groupBy({
+          by: ['category'],
+          _count: { category: true },
+          where: { userId }
+      }),
+      
+      // 5. By MIME Type (MongoDB Aggregate for $group)
+      prisma.studyMaterial.groupBy({
+          by: ['mimeType'],
+          _count: { mimeType: true },
+          where: { userId }
+      }),
+      
+      // 6. Download Stats (MongoDB Aggregate for $sum, $avg, $max)
+      prisma.studyMaterial.aggregate({
+          where: { userId },
+          _sum: { downloadCount: true },
+          _avg: { downloadCount: true },
+          _max: { downloadCount: true }
+      })
+  ]);
+
+  // Format the output to match the original function's return structure
+  // Note the change in accessing aggregate results
+  const totalSizeBytes = totalSize._sum.fileSize || 0;
+  
+  return {
+      total,
+      publicCount,
+      // Convert total size from bytes (assuming 'fileSize') to MB
+      totalSizeMB: Math.round(totalSizeBytes / (1024 * 1024) * 100) / 100,
+      
+      // Map Prisma groupBy results to the desired key-value object format
+      byCategory: byCategory.reduce((acc, item) => {
+          // Prisma groupBy uses `item._count.category` instead of `item.count`
+          acc[item.category] = item._count.category; 
+          return acc;
+      }, {} as Record<string, number>),
+      
+      byMimeType: byMimeType.reduce((acc, item) => {
+          acc[item.mimeType] = item._count.mimeType;
+          return acc;
+      }, {} as Record<string, number>),
+      
+      // Access aggregate results directly from the object
+      downloadStats: {
+          totalDownloads: downloadStats._sum.downloadCount || 0,
+          avgDownloads: downloadStats._avg.downloadCount || 0,
+          maxDownloads: downloadStats._max.downloadCount || 0,
+      }
+  };
+}
+
   // Relatório de produtividade
   static async getProductivityReport(userId: string, days: number = 7) {
     const endDate = new Date();
@@ -363,3 +428,4 @@ static async getFlashcardReport(userId: string) {
     };
   }
 }
+
