@@ -5,7 +5,7 @@ import { ApiResponse } from '../types';
 export const getUserReport = async (req: Request, res: Response<ApiResponse>) => {
   try {
     const userId = req.user!.id;
-    const period = (req.query.period as 'day' | 'week' | 'month' | 'year') || 'week';
+    const period = (req.query['period'] as 'day' | 'week' | 'month' | 'year') || 'week';
 
     const report = await ReportService.getUserReport(userId, period);
 
@@ -26,7 +26,7 @@ export const getUserReport = async (req: Request, res: Response<ApiResponse>) =>
 export const getProgressReport = async (req: Request, res: Response<ApiResponse>) => {
   try {
     const userId = req.user!.id;
-    const days = parseInt(req.query.days as string) || 30;
+    const days = parseInt(req.query['days'] as string) || 30;
 
     if (days < 1 || days > 365) {
       return res.status(400).json({
