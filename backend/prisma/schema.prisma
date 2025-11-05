@@ -45,8 +45,8 @@ model StudySession {
   userId    String
   mode      SessionMode
   subject   String?
-  startTime String
-  endTime   String?
+  startTime DateTime
+  endTime   DateTime?
   duration  Int // in minutes
   isActive  Boolean     @default(true)
   createdAt DateTime    @default(now())

@@ -52,12 +52,13 @@ export class SchedulerService {
     // Run daily at 9 AM
     cron.schedule('0 9 * * *', async () => {
       try {
-        const today = new Date().toISOString().split('T')[0];
+        const startOfToday = new Date();
+        startOfToday.setHours(0, 0, 0, 0)
         
         const overdueTasks = await prisma.task.findMany({
           where: {
             completed: false,
-            dueDate: { lt: today }
+            dueDate: { lt: startOfToday }
           },
           include: {
             user: true
@@ -203,12 +204,13 @@ export class SchedulerService {
 
   // Manual overdue task check (for testing)
   static async checkOverdueTasksNow(): Promise<void> {
-    const today = new Date().toISOString().split('T')[0];
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
     
     const overdueTasks = await prisma.task.findMany({
       where: {
         completed: false,
-        dueDate: { lt: today }
+        dueDate: { lt: startOfToday }
       }
     });
 
