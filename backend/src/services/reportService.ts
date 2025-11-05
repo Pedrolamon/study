@@ -1,5 +1,5 @@
 import { prisma } from '../models';
-import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays } from 'date-fns';
+import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, subWeeks } from 'date-fns';
 
 export class ReportService {
   // Relatório geral do usuário
@@ -291,38 +291,165 @@ static async getFlashcardReport(userId: string) {
     };
   }
 
-  // Refactored getStudyMaterialReport using Prisma
+  static async getNotificationReport(userId: string) {
+    const totalPromise = prisma.notification.count({
+      where: { userId },
+    });
+
+    const unreadPromise = prisma.notification.count({
+      where: { userId, isRead: false },
+    });
+
+    const byTypePromise = prisma.notification.groupBy({
+      by: ['type'],
+      _count: {
+        type: true, 
+      },
+      where: { userId },
+    });
+
+    const recentActivityPromise = prisma.notification.findMany({
+      where: { userId },
+      orderBy: {
+        createdAt: 'desc', 
+      },
+      take: 10, 
+    });
+
+    const [total, unread, byTypeResult, recentActivity] = await Promise.all([
+      totalPromise,
+      unreadPromise,
+      byTypePromise,
+      recentActivityPromise,
+    ]);
+
+    const byType = byTypeResult.reduce((acc, item) => {
+      
+      acc[item.type] = item._count.type;
+      return acc;
+    }, {} as Record<string, number>);
+
+    return {
+      total,
+      unread,
+      byType,
+      recentActivity,
+    };
+  }
+
+  static async getComparativeReport(userId: string) {
+    const now = new Date();
+    const currentWeekStart = startOfWeek(now, { weekStartsOn: 1 });
+    const currentWeekEnd = endOfWeek(now, { weekStartsOn: 1 });
+
+    const lastWeekStart = subWeeks(currentWeekStart, 1);
+    const lastWeekEnd = subWeeks(currentWeekEnd, 1);
+
+    const [currentWeek, lastWeek] = await Promise.all([
+        this.getUserReport(userId, 'week'), 
+        this.getUserReportForPeriod(userId, lastWeekStart, lastWeekEnd)
+    ]);
+    return {
+        currentWeek,
+        lastWeek,
+        comparison: {
+            studyTimeChange: this.calculatePercentageChange(
+                currentWeek.study.totalTimeHours,
+                lastWeek.study.totalTimeHours
+            ),
+            taskCompletionChange: this.calculatePercentageChange(
+                currentWeek.tasks.completionRate,
+                lastWeek.tasks.completionRate
+            ),
+            sessionsChange: this.calculatePercentageChange(
+                currentWeek.study.sessions,
+                lastWeek.study.sessions
+            )
+        }
+    };
+}
+
+private static calculatePercentageChange(current: number, previous: number): number {
+  if (previous === 0) return current > 0 ? 100 : 0;
+  return Math.round(((current - previous) / previous) * 100);
+}
+
+private static async getUserReportForPeriod(userId: string, startDate: Date, endDate: Date) {
+  const [
+      tasksCreated,
+      tasksCompleted,
+      studySessions,
+      totalStudyTimeResult
+  ] = await Promise.all([
+      prisma.task.count({
+          where: {
+              userId,
+              createdAt: { gte: startDate, lte: endDate }
+          }
+      }),
+      prisma.task.count({
+          where: {
+              userId,
+              completed: true,
+              updatedAt: { gte: startDate, lte: endDate }
+          }
+      }),
+      prisma.studySession.count({
+          where: {
+              userId,
+              endTime: { gte: startDate, lte: endDate }
+          }
+      }),
+      prisma.studySession.aggregate({
+          where: {
+              userId,
+              endTime: { gte: startDate, lte: endDate }
+          },
+          _sum: { duration: true }
+      })
+  ]);
+
+  const totalDurationSeconds = totalStudyTimeResult._sum.duration || 0;
+  
+  const totalStudyTimeHours = totalDurationSeconds / 3600; 
+
+  return {
+      tasks: {
+          created: tasksCreated,
+          completed: tasksCompleted,
+          completionRate: tasksCreated > 0 ? (tasksCompleted / tasksCreated) * 100 : 0
+      },
+      study: {
+          sessions: studySessions,
+          totalTimeHours: Math.round(totalStudyTimeHours * 100) / 100,
+          averageSessionTime: studySessions > 0 ? Math.round((totalStudyTimeHours / studySessions) * 100) / 100 : 0
+      }
+  };
+}
+
 static async getStudyMaterialReport(userId: string) {
-  // Note: Assuming your Study Material model in Prisma is named 'StudyMaterial'
   
   const [total, publicCount, totalSize, byCategory, byMimeType, downloadStats] = await Promise.all([
-      // 1. Total Count (StudyMaterialModel.countDocuments)
       prisma.studyMaterial.count({ where: { userId } }),
       
-      // 2. Public Count (StudyMaterialModel.countDocuments with filter)
       prisma.studyMaterial.count({ where: { userId, isPublic: true } }),
       
-      // 3. Total Size (MongoDB Aggregate for $sum)
       prisma.studyMaterial.aggregate({
           where: { userId },
-          _sum: { fileSize: true } // Assuming 'fileSize' is the field for size
+          _sum: { fileSize: true } 
       }),
-      
-      // 4. By Category (MongoDB Aggregate for $group)
       prisma.studyMaterial.groupBy({
           by: ['category'],
           _count: { category: true },
           where: { userId }
       }),
       
-      // 5. By MIME Type (MongoDB Aggregate for $group)
       prisma.studyMaterial.groupBy({
           by: ['mimeType'],
           _count: { mimeType: true },
           where: { userId }
       }),
       
-      // 6. Download Stats (MongoDB Aggregate for $sum, $avg, $max)
       prisma.studyMaterial.aggregate({
           where: { userId },
           _sum: { downloadCount: true },
@@ -331,19 +458,13 @@ static async getStudyMaterialReport(userId: string) {
       })
   ]);
 
-  // Format the output to match the original function's return structure
-  // Note the change in accessing aggregate results
   const totalSizeBytes = totalSize._sum.fileSize || 0;
   
   return {
       total,
       publicCount,
-      // Convert total size from bytes (assuming 'fileSize') to MB
       totalSizeMB: Math.round(totalSizeBytes / (1024 * 1024) * 100) / 100,
-      
-      // Map Prisma groupBy results to the desired key-value object format
       byCategory: byCategory.reduce((acc, item) => {
-          // Prisma groupBy uses `item._count.category` instead of `item.count`
           acc[item.category] = item._count.category; 
           return acc;
       }, {} as Record<string, number>),
@@ -353,7 +474,6 @@ static async getStudyMaterialReport(userId: string) {
           return acc;
       }, {} as Record<string, number>),
       
-      // Access aggregate results directly from the object
       downloadStats: {
           totalDownloads: downloadStats._sum.downloadCount || 0,
           avgDownloads: downloadStats._avg.downloadCount || 0,
@@ -362,7 +482,8 @@ static async getStudyMaterialReport(userId: string) {
   };
 }
 
-  // Relatório de produtividade
+
+
   static async getProductivityReport(userId: string, days: number = 7) {
     const endDate = new Date();
     const startDate = subDays(endDate, days);
