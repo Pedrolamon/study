@@ -47,13 +47,13 @@ model StudySession {
   subject   String?
   startTime DateTime
   endTime   DateTime?
-  duration  Int // in minutes
+  duration  Int
   isActive  Boolean     @default(true)
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
-
+  isPerfect Boolean
   // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("study_sessions")
 }
