@@ -16,7 +16,7 @@ export class GamificationController {
 
   // Get leaderboard
   static getLeaderboard = asyncHandler(async (req: Request, res: Response) => {
-    const limit = parseInt(req.query.limit as string) || 50;
+    const limit = parseInt(req.query['limit'] as string) || 50;
     const leaderboard = await GamificationService.getLeaderboard(limit);
     
     res.status(200).json({
@@ -27,7 +27,7 @@ export class GamificationController {
 
   // Get top users by level
   static getTopByLevel = asyncHandler(async (req: Request, res: Response) => {
-    const limit = parseInt(req.query.limit as string) || 10;
+    const limit = parseInt(req.query['limit'] as string) || 10;
     const topUsers = await GamificationService.getTopByLevel(limit);
     
     res.status(200).json({
@@ -38,7 +38,7 @@ export class GamificationController {
 
   // Get recent achievements
   static getRecentAchievements = asyncHandler(async (req: Request, res: Response) => {
-    const limit = parseInt(req.query.limit as string) || 10;
+    const limit = parseInt(req.query['limit'] as string) || 10;
     const achievements = await GamificationService.getRecentAchievements(limit);
     
     res.status(200).json({

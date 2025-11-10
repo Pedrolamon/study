@@ -278,6 +278,312 @@ export class GamificationService {
     }
 }
 
+// Adicionar ao GamificationService (Prisma)
+static async getLeaderboard(limit: number = 50): Promise<any[]> {
+  try {
+      const leaderboard = await prisma.userPoints.findMany({
+          orderBy: {
+              totalPoints: 'desc', // Ordena pelo total de pontos
+          },
+          take: limit, // Limita o número de resultados
+          include: {
+              user: { // Inclui o modelo User para obter o username
+                  select: {
+                      username: true
+                  }
+              }
+          }
+      });
+
+      // Mapeia para o formato de resposta, adicionando o rank
+      return leaderboard.map((entry, index) => ({
+          rank: index + 1,
+          userId: entry.userId,
+          // Assume que o relacionamento 'user' está definido e que 'username' é o campo
+          username: entry.user?.username || 'Usuário',
+          totalPoints: entry.totalPoints,
+          level: entry.level,
+          experience: entry.experience,
+          experienceToNextLevel: entry.experienceToNextLevel
+      }));
+  } catch (error) {
+      console.error('Error getting leaderboard:', error);
+      throw error;
+  }
+}
+
+// Adicionar ao GamificationService (Prisma)
+static async getTopByLevel(limit: number = 10): Promise<any[]> {
+  try {
+      const topUsers = await prisma.userPoints.findMany({
+          orderBy: [
+              { level: 'desc' }, // Nível mais alto primeiro
+              { experience: 'desc' } // Experiência mais alta (como desempate)
+          ],
+          take: limit,
+          include: {
+              user: {
+                  select: {
+                      username: true
+                  }
+              }
+          }
+      });
+
+      // Mapeia para o formato de resposta, adicionando o rank
+      return topUsers.map((entry, index) => ({
+          rank: index + 1,
+          userId: entry.userId,
+          username: entry.user?.username || 'Usuário',
+          level: entry.level,
+          experience: entry.experience,
+          totalPoints: entry.totalPoints
+      }));
+  } catch (error) {
+      console.error('Error getting top by level:', error);
+      throw error;
+  }
+}
+
+// Adicionar ao GamificationService (Prisma)
+static async getRecentAchievements(limit: number = 10): Promise<any[]> {
+  try {
+      const achievements = await prisma.achievement.findMany({
+          orderBy: {
+              unlockedAt: 'desc', // Assumindo que 'unlockedAt' é o campo de data de criação/desbloqueio
+          },
+          take: limit,
+          include: {
+              user: { // Inclui o User para o nome
+                  select: {
+                      username: true
+                  }
+              },
+              badge: { // Inclui o Badge para nome e ícone
+                  select: {
+                      name: true,
+                      icon: true
+                  }
+              }
+          }
+      });
+
+      // Mapeia para o formato de resposta
+      return achievements.map(achievement => ({
+          id: achievement.id, // Assumindo 'id' no modelo Prisma
+          userId: achievement.userId,
+          username: achievement.user?.username || 'Usuário',
+          badgeName: achievement.badge?.name || 'Badge',
+          badgeIcon: achievement.badge?.icon || '',
+          pointsEarned: achievement.pointsEarned,
+          unlockedAt: achievement.unlockedAt // Campo de data/hora
+      }));
+  } catch (error) {
+      console.error('Error getting recent achievements:', error);
+      throw error;
+  }
+}
+
+// Adicionar ao GamificationService (Prisma)
+static async getBadgeProgress(userId: string): Promise<any[]> {
+  try {
+      const badges = await prisma.badge.findMany({
+          // Assumindo que você tem um campo 'isActive' ou algo similar para badges ativos
+          // where: { isActive: true } 
+      });
+
+      // 1. Obter todos os dados do usuário necessários para calcular o progresso
+      // ATENÇÃO: É necessário substituir pelos seus próprios métodos de obtenção de dados do usuário.
+      const [
+          tasksCompletedCount,
+          studyTimeTotalMinutes,
+          flashcardsReviewedCount,
+          materialsUploadedCount,
+          perfectSessionsCount,
+          hasStreak, // Fictício
+          userAchievements
+      ] = await Promise.all([
+          // Exemplo: Contar tarefas completadas. Você precisará implementar esta query no seu Task model.
+          prisma.task.count({ where: { userId, isCompleted: true } }), 
+          // Exemplo: Somar duração de sessões de estudo. Você precisará implementar esta query no seu StudySession model.
+          prisma.studySession.aggregate({
+              where: { userId },
+              _sum: { duration: true } // Assumindo 'duration' em minutos
+          }).then(agg => agg._sum.duration || 0),
+          // Exemplo: Contar revisões de flashcards.
+          prisma.flashcardReview.count({ where: { userId } }), // Modelo Fictício: FlashcardReview
+          // Exemplo: Contar materiais enviados.
+          prisma.studyMaterial.count({ where: { userId } }),
+          // Exemplo: Contar sessões perfeitas (você pode ter um campo para isso no StudySession)
+          prisma.studySession.count({ where: { userId, isPerfect: true } }),
+          // Exemplo: Verificar se há uma streak. (A streak real deve vir do modelo User)
+          prisma.user.findUnique({ where: { id: userId }, select: { studyStreak: true } })
+              .then(user => user?.studyStreak || 0),
+          // Obter as conquistas do usuário
+          prisma.achievement.findMany({ where: { userId } })
+      ]);
+
+      const unlockedBadgeIds = new Set(userAchievements.map(a => a.badgeId));
+      
+      const progressResults = badges.map((badge) => {
+          const isUnlocked = unlockedBadgeIds.has(badge.id);
+
+          // 2. Simular a lógica de progresso (getUserProgress)
+          let currentProgress = 0;
+          let requiredValue = badge.requirements.value || 0; // 'requirements' é um Json
+          let requirementType = badge.requirements.type;
+
+          if (isUnlocked) {
+              currentProgress = requiredValue;
+          } else {
+              switch (requirementType) {
+                  case 'tasks_completed':
+                      currentProgress = tasksCompletedCount;
+                      break;
+                  case 'study_time':
+                      currentProgress = studyTimeTotalMinutes;
+                      break;
+                  case 'flashcards_reviewed':
+                      currentProgress = flashcardsReviewedCount;
+                      break;
+                  case 'materials_uploaded':
+                      currentProgress = materialsUploadedCount;
+                      break;
+                  case 'perfect_sessions':
+                      currentProgress = perfectSessionsCount;
+                      break;
+                  case 'streak_days':
+                      currentProgress = hasStreak;
+                      break;
+                  default:
+                      currentProgress = 0;
+              }
+          }
+          
+          // 3. Calcular a porcentagem
+          const percentage = requiredValue > 0 
+              ? Math.min(100, Math.floor((currentProgress / requiredValue) * 100)) 
+              : (isUnlocked ? 100 : 0);
+          
+          return {
+              id: badge.id,
+              name: badge.name,
+              description: badge.description,
+              icon: badge.icon,
+              category: badge.category,
+              pointsReward: badge.pointsReward,
+              isUnlocked,
+              progress: {
+                  current: currentProgress,
+                  required: requiredValue,
+                  percentage: percentage
+              }
+          };
+      });
+
+      return progressResults;
+  } catch (error) {
+      console.error('Error getting badge progress:', error);
+      throw error;
+  }
+}
+
+// Adicionar ao GamificationService (Prisma)
+static async initializeDefaultBadges(): Promise<void> {
+  try {
+      const defaultBadges = [
+          {
+              name: 'Primeiro Passo',
+              description: 'Complete sua primeira tarefa',
+              icon: '🎯',
+              category: 'ACHIEVEMENT', // Usando maiúsculas como no código Prisma original
+              pointsReward: 50,
+              requirements: { type: 'tasks_completed', value: 1 }
+          },
+          {
+              name: 'Estudioso',
+              description: 'Complete 10 tarefas',
+              icon: '📚',
+              category: 'STUDY',
+              pointsReward: 100,
+              requirements: { type: 'tasks_completed', value: 10 }
+          },
+          {
+              name: 'Mestre',
+              description: 'Complete 50 tarefas',
+              icon: '👑',
+              category: 'ACHIEVEMENT',
+              pointsReward: 500,
+              requirements: { type: 'tasks_completed', value: 50 }
+          },
+          {
+              name: 'Focado',
+              description: 'Estude por 30 minutos',
+              icon: '⏰',
+              category: 'STUDY',
+              pointsReward: 75,
+              requirements: { type: 'study_time', value: 30 }
+          },
+          {
+              name: 'Maratonista',
+              description: 'Estude por 2 horas',
+              icon: '🏃',
+              category: 'STUDY',
+              pointsReward: 200,
+              requirements: { type: 'study_time', value: 120 }
+          },
+          {
+              name: 'Flashcard Master',
+              description: 'Revise 50 flashcards',
+              icon: '🗂️',
+              category: 'STUDY',
+              pointsReward: 150,
+              requirements: { type: 'flashcards_reviewed', value: 50 }
+          },
+          {
+              name: 'Organizador',
+              description: 'Faça upload de 5 materiais',
+              icon: '📁',
+              category: 'ACHIEVEMENT',
+              pointsReward: 100,
+              requirements: { type: 'materials_uploaded', value: 5 }
+          },
+          {
+              name: 'Consistente',
+              description: 'Mantenha uma sequência de 7 dias',
+              icon: '🔥',
+              category: 'SOCIAL',
+              pointsReward: 300,
+              requirements: { type: 'streak_days', value: 7 }
+          },
+          {
+              name: 'Perfeccionista',
+              description: 'Complete 10 sessões perfeitas',
+              icon: '⭐',
+              category: 'SPECIAL',
+              pointsReward: 400,
+              requirements: { type: 'perfect_sessions', value: 10 }
+          }
+      ];
+      
+      for (const badgeData of defaultBadges) {
+          // Verifica se o badge já existe
+          const existingBadge = await prisma.badge.findUnique({
+              where: { name: badgeData.name } 
+          });
+
+          if (!existingBadge) {
+              // Cria o badge se não existir
+              await prisma.badge.create({ data: badgeData as any });
+          }
+      }
+      
+      console.log('Default badges initialized');
+  } catch (error) {
+      console.error('Error initializing default badges:', error);
+  }
+}
+
   static async getUserStats(userId: string) {
     const userPoints = await this.getOrCreateUserPoints(userId);
     
