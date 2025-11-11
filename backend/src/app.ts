@@ -36,7 +36,7 @@ app.use(helmet());
 
 // CORS configuration
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: process.env['CORS_ORIGIN'] || 'http://localhost:5173',
   credentials: true,
   optionsSuccessStatus: 200
 };
@@ -44,8 +44,8 @@ app.use(cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: Number(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // limit each IP to 100 requests per windowMs
+  windowMs: Number(process.env['RATE_LIMIT_WINDOW_MS']) || 15 * 60 * 1000, // 15 minutes
+  max: Number(process.env['RATE_LIMIT_MAX_REQUESTS']) || 100, // limit each IP to 100 requests per windowMs
   message: {
     success: false,
     error: 'Too many requests from this IP, please try again later.'

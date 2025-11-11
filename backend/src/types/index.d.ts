@@ -149,6 +149,14 @@ export interface ApiResponse<T = any> {
   error?: string;
 }
 
+declare namespace NodeJS {
+  interface ProcessEnv {
+    PORT?: string;
+    NODE_ENV: 'development' | 'production' | 'test';
+  }
+}
+
+
 export interface PaginationParams {
   page?: number | string;
   limit?: number | string;

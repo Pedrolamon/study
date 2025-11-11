@@ -80,8 +80,8 @@ export class GamificationController {
     res.status(200).json({
       success: true,
       data: {
-        history: stats.recentHistory,
-        pointsBySource: stats.pointsBySource
+        history: stats.userPoints.pointsHistory,
+        pointsBySource: []
       }
     });
   });
@@ -91,11 +91,12 @@ export class GamificationController {
     const userId = req.user!.id;
     const stats = await GamificationService.getUserStats(userId);
     
+    
     res.status(200).json({
       success: true,
       data: {
-        rank: stats.rank,
-        totalUsers: stats.totalUsers,
+       // rank: stats.rank,
+       // totalUsers: stats.totalUsers,
         level: stats.userPoints?.level || 1,
         totalPoints: stats.userPoints?.totalPoints || 0
       }
@@ -117,18 +118,18 @@ export class GamificationController {
           experience: stats.userPoints?.experience || 0,
           experienceToNextLevel: stats.userPoints?.experienceToNextLevel || 100,
           totalPoints: stats.userPoints?.totalPoints || 0,
-          rank: stats.rank,
+         /* rank: stats.rank,
           totalUsers: stats.totalUsers,
-          levelProgress: stats.levelProgress,
+          levelProgress: stats.levelProgress,*/
           achievements: stats.achievements.length,
-          badges: stats.badges.filter((b: any) => b.isUnlocked).length
+         // badges: stats.badges.filter((b: any) => b.isUnlocked).length
         },
         recentAchievements,
         leaderboard,
-        nextBadges: stats.badges
+       /*nextBadges: stats.badges
           .filter((b: any) => !b.isUnlocked)
           .sort((a: any, b: any) => b.progress.percentage - a.progress.percentage)
-          .slice(0, 5)
+          .slice(0, 5)*/
       }
     });
   });

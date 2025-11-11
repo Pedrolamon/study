@@ -229,7 +229,8 @@ export class GamificationService {
                 icon: '🏆',
                 category: 'ACHIEVEMENT',
                 pointsReward: this.POINTS_CONFIG.badge_unlocked,
-                requirements: {}
+                requirements: {},
+                allUsersPoints: 0 
             }
         });
     }

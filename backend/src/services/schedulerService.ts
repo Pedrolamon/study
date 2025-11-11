@@ -49,7 +49,6 @@ export class SchedulerService {
 
   // Schedule overdue task check
   private static scheduleOverdueTaskCheck() {
-    // Run daily at 9 AM
     cron.schedule('0 9 * * *', async () => {
       try {
         const startOfToday = new Date();
@@ -218,8 +217,86 @@ export class SchedulerService {
     return;
   }
 
+  // SchedulerService
+private static async checkActiveSessions() {
+  try {
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    // 1. Encontrar sessões muito antigas para processamento
+    const activeSessions = await prisma.studySession.findMany({
+      where: {
+        isActive: true,
+        startTime: { lt: twentyFourHoursAgo }
+      },
+      // Incluir usuário para notificação, se necessário
+      include: {
+        user: true
+      }
+    });
+
+    const finishedSessionsCount = activeSessions.length;
+
+    for (const session of activeSessions) {
+      const endTime = new Date();
+      // Calcular duração em segundos
+      const duration = Math.floor((endTime.getTime() - session.startTime.getTime()) / 1000); 
+
+      // 2. Finalizar e atualizar a sessão no banco
+      await prisma.studySession.update({
+        where: { id: session.id },
+        data: {
+          isActive: false,
+          endTime: endTime,
+          duration: duration,
+        },
+      });
+      
+      // 3. Criar notificação (adaptando de NotificationService.createStudyNotification)
+      await NotificationService.createNotification({
+        userId: session.userId,
+        title: 'Sessão de Estudo Finalizada',
+        message: `Sua sessão de ${session.subject} foi finalizada automaticamente após ${Math.floor(duration / 60)} minutos.`,
+        type: 'STUDY',
+        isRead: false,
+        isEmailSent: false
+      });
+    }
+
+    console.log(`⏱️ ${finishedSessionsCount} sessões antigas finalizadas e notificadas`);
+  } catch (error) {
+    console.error('Erro ao verificar sessões ativas (finalização):', error);
+  }
+}
+
+// SchedulerService
+static async scheduleCustomNotification(
+  userId: string,
+  title: string,
+  message: string,
+  // Ajustando o tipo para os ENUMs tipicamente usados no Prisma
+  type: 'TASK' | 'STUDY' | 'EXAM' | 'REMINDER' | 'ACHIEVEMENT' | 'SYSTEM',
+  scheduledFor: Date
+) {
+  try {
+    // Assumimos que o NotificationService tem um método para criar notificações agendadas.
+    // Usaremos createNotification com a flag isScheduled e a data
+    await NotificationService.createNotification({
+      userId: userId,
+      title: title,
+      message: message,
+      type: type,
+      isRead: false,
+      isEmailSent: false,
+    });
+    
+    console.log(`📅 Notificação agendada para ${scheduledFor}`);
+  } catch (error) {
+    console.error('Erro ao agendar notificação personalizada:', error);
+    throw error;
+  }
+}
   // Get scheduler status
-  static getStatus() {
+  static stopAllSchedulers() {
     return {
       initialized: this.isInitialized,
       schedulers: [

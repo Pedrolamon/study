@@ -1,4 +1,4 @@
-// Re-export do Prisma client para uso nos modelos
+ Re-export do Prisma client para uso nos modelos
 export { prisma } from '../config/database';
 
 // Re-export dos tipos do Prisma

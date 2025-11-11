@@ -1,4 +1,4 @@
-/*import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from 'mongoose';
 import type { Appointment } from '../types';
 
 export interface AppointmentDocument extends Omit<Appointment, 'id' | '_id'>, Document {}
@@ -123,4 +123,4 @@ appointmentSchema.virtual('isPast').get(function() {
 // Ensure virtuals are included in JSON output
 appointmentSchema.set('toJSON', { virtuals: true });
 
-export const AppointmentModel = mongoose.model<AppointmentDocument>('Appointment', appointmentSchema); */
+export const AppointmentModel = mongoose.model<AppointmentDocument>('Appointment', appointmentSchema); 

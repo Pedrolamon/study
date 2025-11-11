@@ -1,4 +1,4 @@
-/*import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from 'mongoose';
 
 export interface BlockedSite {
   _id?: string;
@@ -404,4 +404,4 @@ export const BlockedSiteModel = mongoose.model<BlockedSiteDocument>('BlockedSite
 export const FocusSessionModel = mongoose.model<FocusSessionDocument>('FocusSession', focusSessionSchema);
 export const FocusProfileModel = mongoose.model<FocusProfileDocument>('FocusProfile', focusProfileSchema);
 export const DistractionLogModel = mongoose.model<DistractionLogDocument>('DistractionLog', distractionLogSchema);
-export const FocusAnalyticsModel = mongoose.model<FocusAnalyticsDocument>('FocusAnalytics', focusAnalyticsSchema);*/
+export const FocusAnalyticsModel = mongoose.model<FocusAnalyticsDocument>('FocusAnalytics', focusAnalyticsSchema);

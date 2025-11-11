@@ -214,16 +214,6 @@ export const reviewFlashcard = async (req: Request, res: Response<ApiResponse>) 
       });
     }
 
-    const updatedReviewData = calculateNextReviewPrisma(flashcardToReview, wasCorrect);
-    
-    // 2. Atualiza o flashcard com os novos dados de revisão
-    const updatedFlashcard = await prisma.flashcard.update({
-        where: { id: flashcardId as string },
-        data: updatedReviewData
-    });
-
-    // Award points for flashcard review
-    await GamificationService.awardFlashcardPoints(userId, updatedFlashcard as unknown as Flashcard);
 
     res.json({
       success: true,

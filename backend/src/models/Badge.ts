@@ -1,4 +1,4 @@
-/*import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IBadge extends Document {
   name: string;
@@ -144,4 +144,4 @@ badgeSchema.statics.getBadgesByCategory = function(category: string) {
   return this.find({ category, isActive: true }).sort({ pointsReward: 1 });
 };
 
-export default mongoose.model<IBadge>('Badge', badgeSchema); */
+export default mongoose.model<IBadge>('Badge', badgeSchema); 

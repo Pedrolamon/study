@@ -1,4 +1,4 @@
-/*import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from 'mongoose';
 import type { StudySession } from '../types';
 
 export interface StudySessionDocument extends StudySession, Document {}
@@ -73,4 +73,4 @@ studySessionSchema.virtual('durationHours').get(function() {
 // Ensure virtuals are included in JSON output
 studySessionSchema.set('toJSON', { virtuals: true });
 
-export const StudySessionModel = mongoose.model<StudySessionDocument>('StudySession', studySessionSchema); */
+export const StudySessionModel = mongoose.model<StudySessionDocument>('StudySession', studySessionSchema);

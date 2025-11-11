@@ -39,12 +39,13 @@ export const createStudySession = async (req: AuthRequest, res: Response): Promi
 
     const session = await prisma.studySession.create({
       data:{
-      userId,
+      userId: req.user.id,
       mode,
-      subject,
-      startTime: new Date().toISOString(),
+      subject: subject ?? null,
+      startTime: new Date(),
       duration: Number(duration),
-      isActive: true
+      isActive: true,
+      isPerfect: false
       }
     });
 

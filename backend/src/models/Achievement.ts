@@ -1,4 +1,4 @@
-/*import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IAchievement extends Document {
   userId: mongoose.Types.ObjectId;
@@ -92,4 +92,4 @@ achievementSchema.statics.getUserTotalPoints = function(userId: string) {
   ]);
 };
 
-export default mongoose.model<IAchievement>('Achievement', achievementSchema); */
+export default mongoose.model<IAchievement>('Achievement', achievementSchema); 

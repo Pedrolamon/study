@@ -1,4 +1,4 @@
-/*import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Document, Schema } from 'mongoose';
 import type { Notification } from '../types';
 
 export interface NotificationDocument extends Notification, Document {}
@@ -74,4 +74,4 @@ notificationSchema.methods.markAsEmailSent = function(): Promise<void> {
   return this.save();
 };
 
-export const NotificationModel = mongoose.model<NotificationDocument>('Notification', notificationSchema); */
+export const NotificationModel = mongoose.model<NotificationDocument>('Notification', notificationSchema); 

@@ -6,7 +6,7 @@ import { GamificationService } from './services/gamificationService';
 // Load environment variables
 dotenv.config();
 
-const PORT = process.env.PORT || 3001;
+const PORT: number = parseInt(process.env['PORT'] ?? '3001', 10);
 
 const server = app.listen(PORT, () => {
   console.log(`🚀 Study App API server running on port ${PORT}`);

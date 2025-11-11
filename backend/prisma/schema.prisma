@@ -226,26 +226,42 @@ model UserPoints {
   lastUpdated           DateTime @default(now())
 
   // Relations
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userBadges UserBadge[]
 
   @@map("user_points")
 }
 
 // Badge Model
 model Badge {
-  id           String        @id @default(cuid())
-  name         String
-  description  String
-  icon         String
-  category     BadgeCategory
-  pointsReward Int
-  requirements Json
-  isUnlocked   Boolean       @default(false)
-  unlockedAt   DateTime?
+  id             String        @id @default(cuid())
+  name           String
+  description    String
+  icon           String
+  category       BadgeCategory
+  pointsReward   Int
+  requirements   Json
+  isUnlocked     Boolean       @default(false)
+  unlockedAt     DateTime?
+  allUsersPoints Int?
 
   achievements Achievement[]
+  userBadges   UserBadge[]
 
   @@map("badges")
+}
+
+model UserBadge {
+  id           String   @id @default(cuid())
+  userPointsId String
+  badgeId      String
+  unlockedAt   DateTime @default(now())
+
+  userPoints UserPoints @relation(fields: [userPointsId], references: [id], onDelete: Cascade)
+  badge      Badge      @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+
+  @@unique([userPointsId, badgeId])
+  @@map("user_badges")
 }
 
 // Blocked Site Model
